@@ -1,0 +1,48 @@
+PWD=$(shell pwd)
+
+# CarPlay/Android Auto: 1=enable, 0=disable
+CONFIG_CARPLAY ?= 1
+
+#�����ļ�����
+BIN = runcarplay
+
+
+
+#��������·��
+USRLIB_PATH=$(PWD)/../../../external
+
+#Դ��Ŀ¼
+SRCDIR = $(PWD)/../../src
+
+
+SRCINC = -I$(SRCDIR)/           \
+         -I$(SRCDIR)/arch/linux \
+         -I$(SRCDIR)/common    \
+         -I$(SRCDIR)/para      \
+	 -I$(SRCDIR)/drivers/linux \
+         -I$(SRCDIR)/carplay    \
+		 -I$(SRCDIR)/bluetooth    \
+				 -I$(SRCDIR)/app/gui  \
+				 -I$(SRCDIR)/app/gui_app \
+				 -I$(SRCDIR)/app/main  \
+				 -I$(SRCDIR)/app/mv	\
+				 -I$(SRCDIR)/app/aes	\
+				 -I$(SRCDIR)/app/venc	\
+				 -I$(SRCDIR)/app/venc/include	\
+				 -I$(SRCDIR)/app/g2d	\
+				 -I$(SRCDIR)/app/g2d/include	\
+				 -I$(SRCDIR)/app/video	\
+				 -I$(SRCDIR)/media/media_work	\
+				 -I$(SRCDIR)/media/media_tools/TFCard	\
+				 -I$(SRCDIR)/media/media_tools/photo_view
+ifneq ($(CONFIG_CARPLAY),0)
+SRCINC += -I$(SRCDIR)/carplay_display
+endif
+				 
+
+
+
+		 
+		 
+#����ļ�·��
+outputpath = 

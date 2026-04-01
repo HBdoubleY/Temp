@@ -1,0 +1,252 @@
+include makeconfig
+
+COMPILE_PREX = ../../../toolchain/toolchain-sunxi-musl/toolchain/bin/arm-openwrt-linux-muslgnueabi-
+
+CXX = $(COMPILE_PREX)g++
+AR = $(COMPILE_PREX)ar
+CC = $(COMPILE_PREX)gcc
+XX = $(COMPILE_PREX)g++
+NM = $(COMPILE_PREX)nm
+CPP = $(COMPILE_PREX)g++
+STRIP = $(COMPILE_PREX)strip
+SIZE = $(COMPILE_PREX)size
+OBJCOPY = $(COMPILE_PREX)objcopy
+OBJDUMP = $(COMPILE_PREX)objdump
+LD = $(COMPILE_PREX)ld
+
+# ����д��ʱ��Ŀ¼�����ڻᱨ���������Ҫ��obj/�½����ڶ���Ŀ¼һ����Ŀ¼
+SDKDEBUG_FLAGS = -O3
+MAKEDEPEND = $(CC) -MM -MT
+
+CFLAGS = $(SDKDEBUG_FLAGS) -Wall -W
+CPPFLAGS = $(SDKDEBUG_FLAGS) -Wall -W
+
+CFLAGS :=   -Wall -O3 -g0 -pipe -fpermissive -Wno-unused-local-typedefs \
+	   	-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-caller-saves -Wno-unused-result -Wformat -Werror=format-security -fstack-protector -Wl,-z,now -Wl,-z,relro -ffunction-sections -fdata-sections   \
+		 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D__STDC_CONSTANT_MACROS \
+		-D_GNU_SOURCE -D_REENTRANT \
+		 $(CFLAGS)
+
+CPPFLAGS := -Wall -O3 -g0 -pipe -fpermissive -Wno-unused-local-typedefs \
+	   	-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-caller-saves -Wno-unused-result -Wformat -Werror=format-security -fstack-protector -Wl,-z,now -Wl,-z,relro -ffunction-sections -fdata-sections   \
+		 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D__STDC_CONSTANT_MACROS \
+		-D_GNU_SOURCE -D_REENTRANT \
+		 $(CPPFLAGS)
+
+
+AWCHIP = AW_V853
+
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawlist
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawnn_full
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawaiisp
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include/utils
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include/media
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include/component
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/include/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/isp_dev
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/include/V4l2Camera
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/isp_tuning
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libISE/include/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_stream
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_FsWriter
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libcedarc/include
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_muxer
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libResample/include
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libcedarx/libcore/common/iniparser
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/sample/configfileparser/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/include
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/libion/include/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/private/rtsp/IPCProgram/interface/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/utils/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/camera/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/bdii/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/eis/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/ise/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/motion/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/player/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/recorder/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/thumbretriever/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/usbcamera/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/videoresizer/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libADAS/include/
+USER_INC_BASE_DIR  += $(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include/component/
+
+
+
+USER_INCS = $(addprefix -I , $(shell find $(USER_INC_BASE_DIR) -type d) )
+CEDAR_INC = 	-I$(USRLIB_PATH)/include
+
+# ȫ־ͷ�ļ�·����ֻ��Ϊͷ�ļ������������룩
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/glogCWrapper
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawlist
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawnn_full
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/libawaiisp
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include/utils
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include/media
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include/component
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/include/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/isp_dev
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/include/V4l2Camera
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/isp_tuning
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_stream
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_FsWriter
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libcedarc/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/include_muxer
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libResample/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libcedarx/libcore/common/iniparser
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/sample/configfileparser/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/include
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/libion/include/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/private/rtsp/IPCProgram/interface/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/libbaselist/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/include/utils/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libisp/include/device/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/include/utils/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/include/media/utils/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/AudioLib/midware/encoding/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/AudioLib/midware/encoding/include/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/system/public/include/vo/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/player/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/media/recorder/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/utils/
+CEDAR_INC  += -I$(USRLIB_PATH)/aw_pack_src/lib_aw/include/eyesee-mpp/framework/include/
+
+CEDAR_INC  += -I$(USRLIB_PATH)/../lvgl-gui/ui/generated/
+
+
+CEDAR_INC  += -I$(USRLIB_PATH)/carplay/include/
+CEDAR_INC  += -I$(USRLIB_PATH)/carplay/libzbt/
+
+CEDAR_INC += $(USER_INCS)
+
+
+MAKE = make
+
+CEDAR_INC += $(USER_INCS)
+
+#��ý�徲̬��Ŀ¼
+mpp_lib_dir=$(USRLIB_PATH)/aw_pack_src/lib_aw/lib/eyesee-mpp
+mpp_lib_dir += $(USRLIB_PATH)/aw_pack_src/lib_aw/lib/libawaiisp
+user_lib_dir = $(addprefix -L ,  $(shell find $(mpp_lib_dir) -type d))
+LINKFLAGS = \
+	-lpthread -lrt -ldl -lm -Wl,--gc-sections \
+	$(user_lib_dir) \
+
+#�Զ������ӿ��ļ����������е�.a��
+#�������е�.a���ļ�
+lib_files := $(foreach dir,$(mpp_lib_dir),$(wildcard $(dir)/*.a))
+#���ļ�ȥ��Ŀ¼��ֻ�����ļ���
+lib_nordir :=  $(notdir $(lib_files))
+#���������ȥ��ͷlib �� β��.a
+lib_name := $(patsubst lib%,%,$(patsubst %.a,%,$(lib_nordir)))
+#�����п�����-l����
+ld_mpp_libs := $(addprefix -l, $(lib_name))
+
+LIBSA +=  -ldl -lrt -lpthread -lm -lc -lz  -fPIC -Wall -Wno-unused-but-set-variable \
+     	-Wl,--start-group   \
+-L../../../external/lib      \
+-L../../../external/aw_pack_src/lib_aw/lib/eyesee-mpp	\
+-L../../../external/aw_pack_src/lib_aw/lib/libawaiisp	\
+-L../../../external/carplay/libzbt	\
+-L../../../external/carplay/lib	\
+-lvideoengine -laacenc -lcdx_mp3_parser -ladecoder -lthumbretriever \
+-lexpat -lcamera -lhwdisplay -lisp_dev -lcustomaw_media_utils \
+-lisp_afs -lcdx_base -lisp_gtm -lcdx_mpg_parser -lisp_base \
+-lwav_muxer -lvencoder -lrecorder -lcedarx_aencoder -lcdx_file_stream \
+-law_mpp -lisp_pltm -lvenc_base -lvenc_h264 -lplayer -lcedarxstream -lisp_awb \
+-lcivetweb -lmedia_utils -liniparser -lraw_muxer -lIniParserMpp \
+-lcdx_flac_parser -lcedarx_tencoder -lAudioVps -llz4 -lmpeg2ts_muxer \
+-lcdx_mov_parser -lcedarxdemuxer -lawion -lResample -laac_muxer \
+-lfreetype -lVE -lfilerepair -lisp_ini -lisp_af -lmuxers -lffavutil \
+-lcdx_wav_parser -lAns -lawmjpeg -lcdx_parser \
+-lsample_confparser -lMemAdapter -lSQLiteCpp -lcdx_ape_parser \
+-lisp_math -lawh265 -lawh264 -lmp3_muxer -lcedarxrender -lPluginMpp \
+-lISP -lvenc_jpeg -lisp_ae -lcdx_ts_parser -lvdecoder \
+-lwav -lluaconfig -lmp4_muxer -lcdx_aac_parser -laac -lAec -lisp_md \
+-lTinyServer -lvenc_common -lcdc_base -lcdx_ogg_parser -lvenc_h265 \
+-lisp_iso -lz -lmotion -lglog -llog -lcdx_stream -lFsWriter -lAgc \
+-lcdx_id3v2_parser -lcdx_amr_parser -lisp_rolloff -lawaiisp \
+-lunwind -lasound -llua -luapi -lpng -lluaconfig \
+-lzbt -lzlink	\
+-llvgl 	\
+    	-Wl,--end-group
+
+# -lrgb_ctrl 
+
+LDFLAGS = -Wl,-gc-sections	
+
+
+FILDIRS := ./depend% ./obj% $(SRCDIR)/arch/win $(SRCDIR)/drivers/win
+
+SRCDIRS = $(filter-out $(FILDIRS),$(shell find $(SRCDIR) -maxdepth 3 -type d))
+
+
+#==================��������SRC_PATHĿ¼c��c++Դ��·��=============#	
+CSRCS =  $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c))  
+CPPSRCS = $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.cpp))
+
+#=================��������obj·������������================#
+OBJROOTDIR = ./obj
+COBJS =    $(subst $(SRCDIR),$(OBJROOTDIR),$(CSRCS:.c=.o))
+CPPOBJS =  $(subst $(SRCDIR),$(OBJROOTDIR),$(CPPSRCS:.cpp=.o))
+
+
+#================�������ÿ��.c�ļ���.d��������=============#
+DEFROOTDIR = ./depend
+CDEF = $(subst $(SRCDIR),$(DEFROOTDIR),$(CSRCS:.c=.d))
+CPPDEF = $(subst $(SRCDIR),$(DEFROOTDIR),$(CPPSRCS:.cpp=.d)) 
+
+
+all:$(BIN)
+	@echo "\n$(BIN) compile ok!!!\n\n"
+
+
+$(CDEF) :$(DEFROOTDIR)%.d :$(SRCDIR)%.c
+	set -e; rm -f $@; \
+	$(MAKEDEPEND) $(<:.c=.o) $< $(CEDAR_INC) $(CEDAR_MACORS) $(SRCINC) > $@.$$$$; \
+	sed 's,$(<:.c=.o),obj/$(<:.c=.o) $@ ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+$(CPPDEF) : $(DEFROOTDIR)%.d :$(SRCDIR)%.cpp
+	set -e; rm -f $@; \
+	$(MAKEDEPEND) $(<:.cpp=.o) $< $(CEDAR_INC) $(CEDAR_MACORS) $(SRCINC) > $@.$$$$; \
+	sed 's,$(<:.cpp=.o),obj/$(<:.cpp=.o) $@ ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+depend:
+	rm -f $(CDEF)
+	rm -f $(CPPDEF)
+	$(MAKE) $(CDEF)
+	$(MAKE) $(CPPDEF)
+
+$(COBJS) : $(OBJROOTDIR)%.o:$(SRCDIR)%.c 
+	$(CC) -c $< -o $@  $(CFLAGS) $(CEDAR_INC) $(CEDAR_MACORS) $(SRCINC)
+$(CPPOBJS) : $(OBJROOTDIR)%.o:$(SRCDIR)%.cpp
+	$(CPP) -c $< -o $@  $(CPPFLAGS) $(CEDAR_INC) $(CEDAR_MACORS) $(SRCINC)
+
+$(BIN) : $(COBJS) $(CPPOBJS)
+	$(CPP) -o $(BIN) $(COBJS) $(CPPOBJS) $(LIBS) $(LIBSA) $(LDFLAGS) $(LINKFLAGS)
+	$(STRIP) $(BIN)
+
+
+-include $(CDEF)
+-include $(CPPDEF)
+.PHONY:clean cleanall distclean
+
+clean:            
+	@rm -f $(BIN) $(COBJS) $(CPPOBJS)
+
+cleanall:
+	@rm -f $(CDEF) $(CPPDEF)
+	@rm -f $(BIN) $(COBJS) $(CPPOBJS)
+	@rm -rf depend
+	@rm -rf obj

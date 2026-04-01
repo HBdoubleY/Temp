@@ -1,0 +1,4 @@
+字符串：
+
+符号：
+LV_SYMBOL_REFRESH

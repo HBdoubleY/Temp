@@ -1,0 +1,116 @@
+字符串：
+0%
+V1.0.0
+系统即将重新启动。
+The system is about to restart.
+系統即將重新啟動。
+Le système va redémarrer.
+Das System wird neu gestartet.
+Il sistema si riavvierà.
+システムが再起動します。
+O sistema vai reiniciar.
+Система будет перезагружена.
+El sistema se reiniciará.
+System zostanie uruchomiony ponownie.
+Sistem yeniden başlatılacak.
+시스템이 다시 시작됩니다.
+Het systeem wordt opnieuw opgestart.
+升级文件下载出错。
+Failed to download file.
+升級檔案下載出錯。
+Erreur lors du téléchargement du fichier.
+Fehler beim Herunterladen der Datei.
+Errore durante il download del file.
+ファイルのダウンロードエラー。
+Erro ao transferir o ficheiro.
+Ошибка загрузки файла.
+Error al descargar el archivo.
+Błąd pobierania pliku.
+Dosya indirme hatası.
+파일 다운로드 오류.
+Fout bij downloaden van bestand.
+版本校验文件下载失败
+Failed to download Version file.
+版本校驗檔案下載失敗
+Échec du téléchargement du fichier de version
+Versionsdatei konnte nicht heruntergeladen werden
+Impossibile scaricare il file di versione
+バージョンファイルのダウンロードに失敗
+Falha ao transferir ficheiro de versão
+Не удалось загрузить файл версии
+Error al descargar el archivo de versión
+Nie udało się pobrać pliku wersji
+Sürüm dosyası indirilemedi
+버전 파일 다운로드 실패
+Versiebestand downloaden mislukt
+版本文件无效
+Invalid Version
+版本檔案無效
+Version invalide
+Ungültige Version
+Versione non valida
+無効なバージョン
+Versão inválida
+Недопустимая версия
+Versión no válida
+Nieprawidłowa wersja
+Geçersiz sürüm
+잘못된 버전
+Ongeldige versie
+已是最新版本
+This is the current latest version.
+Vous disposez de la dernière version
+Sie haben die neueste Version
+Versione già aggiornata
+最新バージョンです
+Já tem a versão mais recente
+Установлена последняя версия
+Ya tiene la última versión
+Masz najnowszą wersję
+En son sürüm yüklü
+최신 버전입니다
+U heeft de nieuwste versie
+当前版本: %s
+Current version: %s
+目前版本：%s
+Version actuelle : %s
+Aktuelle Version: %s
+Versione attuale: %s
+現在のバージョン：%s
+Versão atual: %s
+Текущая версия: %s
+Versión actual: %s
+Aktualna wersja: %s
+Mevcut sürüm: %s
+현재 버전: %s
+Huidige versie: %s
+连接成功
+Connected
+連線成功
+Connecté
+Verbunden
+Connesso
+接続成功
+Ligado
+Подключено
+Conectado
+Połączono
+Bağlandı
+연결됨
+Verbonden
+连接失败
+Failed
+連線失敗
+Échec
+Fehlgeschlagen
+Non riuscito
+接続失敗
+Falhou
+Ошибка
+Fallido
+Niepowodzenie
+Başarısız
+실패
+Mislukt
+
+符号：

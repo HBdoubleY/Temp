@@ -1,0 +1,10 @@
+ctrl_interface=/var/log/wpa_supplicant
+ctrl_interface_group=0
+ap_scan=1
+update_config=1
+network={
+        ssid="CQ_TEST_5G"
+        key_mgmt=WPA-PSK
+        psk="11111111"
+        priority=2
+}

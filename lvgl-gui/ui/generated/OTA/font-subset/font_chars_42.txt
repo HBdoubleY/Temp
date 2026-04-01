@@ -1,0 +1,68 @@
+字符串：
+网络不可用
+Network Unavailable
+網路不可用
+Réseau indisponible
+Netzwerk nicht verfügbar
+Rete non disponibile
+ネットワーク利用不可
+Rede indisponível
+Сеть недоступна
+Red no disponible
+Sieć niedostępna
+Ağ kullanılamıyor
+네트워크를 사용할 수 없음
+Netwerk niet beschikbaar
+发现新版本
+Found new version
+發現新版本
+Nouvelle version disponible
+Neue Version verfügbar
+Nuova versione disponibile
+新しいバージョンがあります
+Nova versão disponível
+Доступна новая версия
+Nueva versión disponible
+Dostępna nowa wersja
+Yeni sürüm mevcut
+새 버전 있음
+Nieuwe versie beschikbaar
+OTA升级
+OTA Upgrade
+OTA升級
+Mise à jour OTA
+OTA-Upgrade
+Aggiornamento OTA
+OTAアップデート
+Atualização OTA
+Обновление OTA
+Actualización OTA
+Aktualizacja OTA
+OTA güncellemesi
+OTA 업데이트
+OTA-update
+未连接
+Not connected
+未連線
+Non connecté
+Nicht verbunden
+Non connesso
+未接続
+Não ligado
+Не подключено
+No conectado
+Niepołączony
+Bağlı değil
+연결되지 않음
+Niet verbonden
+WiFi
+
+ !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+0123456789
+abcdefghijklmnopqrstuvwxyz
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+符号：
+LV_SYMBOL_OK
+LV_SYMBOL_CLOSE
+61452,61453

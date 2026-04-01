@@ -1,0 +1,37 @@
+#!/bin/sh
+cd ./lvgl-gui
+# make clean
+rm -rf ./lvgl_main.o
+make
+cd ../
+
+cd ./runcarplay/prj/linux
+rm -rf ./obj/app/main/MainThread.o
+make
+cd ../../../
+
+
+
+
+echo "strip ./runcarplay"
+./toolchain/toolchain-sunxi-musl/toolchain/bin/arm-openwrt-linux-muslgnueabi-strip ./AppUpdateCarplay/carplay/runcarplay
+chmod 777 ./AppUpdateCarplay/carplay/runcarplay
+
+
+#更新升级文件 
+#cp -rf ~/work/t5linux-pro/lichee/platform/framework/auto/sdk_lib/lib64/libsdk_camera.so  ./AVM3DA/lib/libsdk_camerakwx.so
+#rm -rf ./AppUpdateAVM3DT5/AVM3DA/*
+#cp -rf ./AVM3DA/* ./AppUpdateAVM3DT5/AVM3DA/
+#cp -rf ./runLib/* ./AppUpdateAVM3DT5/AVM3DA/
+
+#带调试的文件
+rm -f ./AppUpdateCarplay.tgz
+cd ./AppUpdateCarplay
+tar cvf ../AppUpdateCarplay.tgz ./*
+
+#更新到系统打包文件
+#echo "update to syspack"
+#rm -rf  ~/work/t5linux-pro/lichee/device/config/chips/t507/extpartition/app/*
+#cp -rf ./* ~/work/t5linux-pro/lichee/device/config/chips/t507/extpartition/app/
+
+

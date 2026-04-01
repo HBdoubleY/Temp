@@ -1,0 +1,28 @@
+字符串：
+Unknown
+当前版本: %s
+Current Version: %s
+目前版本：%s
+Version actuelle : %s
+Aktuelle Version: %s
+Versione attuale: %s
+現在のバージョン：%s
+Versão atual: %s
+Текущая версия: %s
+Versión actual: %s
+Aktualna wersja: %s
+Mevcut sürüm: %s
+현재 버전: %s
+Huidige versie: %s
+确定
+OK
+確定
+Tamam
+확인
+
+ !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+0123456789
+abcdefghijklmnopqrstuvwxyz
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+符号：

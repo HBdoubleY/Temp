@@ -1,0 +1,83 @@
+字符串：
+正在连接WiFi
+Connecting WiFi
+正在連線WiFi
+Connexion au WiFi...
+WLAN wird verbunden...
+Connessione WiFi...
+WiFiに接続中...
+A ligar ao WiFi...
+Подключение к WiFi...
+Conectando WiFi...
+Łączenie z WiFi...
+WiFi'ye bağlanılıyor...
+WiFi 연결 중...
+Verbinden met WiFi...
+WiFi连接成功
+WiFi connected successfully
+WiFi連線成功
+WiFi connecté
+WLAN verbunden
+WiFi connesso
+WiFi接続成功
+WiFi ligado
+WiFi подключён
+WiFi conectado
+Połączono z WiFi
+WiFi bağlandı
+WiFi 연결됨
+WiFi verbonden
+请检查密码或网络
+Check password or network
+請檢查密碼或網路
+Vérifiez le mot de passe ou le réseau
+Passwort oder Netzwerk prüfen
+Controllare password o rete
+パスワードまたはネットワークを確認
+Verifique a palavra-passe ou a rede
+Проверьте пароль или сеть
+Compruebe la contraseña o la red
+Sprawdź hasło lub sieć
+Parola veya ağı kontrol edin
+암호 또는 네트워크를 확인하세요
+Controleer wachtwoord of netwerk
+状态: %s (%d/20)
+Status: %s (%d/20)
+狀態：%s (%d/20)
+État : %s (%d/20)
+Stato: %s (%d/20)
+状態：%s (%d/20)
+Estado: %s (%d/20)
+Статус: %s (%d/20)
+Durum: %s (%d/20)
+상태: %s (%d/20)
+扫描中... (%d/20)
+Scanning... (%d/20)
+掃描中... (%d/20)
+Analyse... (%d/20)
+Suche... (%d/20)
+Scansione... (%d/20)
+スキャン中... (%d/20)
+A procurar... (%d/20)
+Поиск... (%d/20)
+Buscando... (%d/20)
+Skanowanie... (%d/20)
+Taranıyor... (%d/20)
+검색 중... (%d/20)
+Zoeken... (%d/20)
+正在获取IP地址...
+Obtaining IP address...
+正在取得IP位址...
+Obtention de l'adresse IP...
+IP-Adresse wird bezogen...
+Acquisizione indirizzo IP...
+IPアドレスを取得中...
+A obter endereço IP...
+Получение IP-адреса...
+Obteniendo dirección IP...
+Uzyskiwanie adresu IP...
+IP adresi alınıyor...
+IP 주소 가져오는 중...
+IP-adres ophalen...
+
+符号：

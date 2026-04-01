@@ -1,0 +1,84 @@
+字符串：
+前置照片
+Front Photo
+Photo avant
+Vorderes Foto
+Foto anteriore
+前面写真
+Foto frontal
+Переднее фото
+Zdjęcie przednie
+Ön fotoğraf
+전면 사진
+Voorste foto
+後置照片
+Rear Photo
+后置照片
+Photo arrière
+Hinteres Foto
+Foto posteriore
+後面写真
+Foto traseira
+Заднее фото
+Foto trasera
+Zdjęcie tylne
+Arka fotoğraf
+후면 사진
+Achterste foto
+前置录像
+Front Video
+前置錄像
+Vidéo de face
+Vorlaufvideo
+Video preregistrato
+前置録画
+Gravação prévia
+предварительная запись
+Grabación previa
+Nagranie wstępne
+Önceden kaydedilmiş video
+사전 녹화
+Vooraf opgenomen video
+后置录像
+Rear Video
+後置錄像
+Vidéo arrière
+Rückfahrkamera
+Videoregistratore posteriore
+Gravação traseira
+задняя видеозапись
+Cámara trasera
+Nagrywanie tylnej kamery
+Arka kamera kaydı
+후방 녹화
+Achtercamera-opname
+紧急录像
+Urgent Video
+緊急錄像
+vidéo d'urgence
+Notfallaufnahme
+Registrazione di emergenza
+緊急録画
+Gravação de emergência
+Аварийная запись
+Grabación de emergencia
+Nagranie awaryjne
+Acil Kayıt
+긴급 녹화
+Noodopname
+存储空间
+Storage Space
+儲存空間
+Espace de stockage
+Speicherplatz
+Spazio di archiviazione
+ストレージ容量
+Espaço de armazenamento
+Хранилище
+Espacio de almacenamiento
+Pamięć masowa
+Depolama alanı
+저장 공간
+Opslagruimte
+
+符号：

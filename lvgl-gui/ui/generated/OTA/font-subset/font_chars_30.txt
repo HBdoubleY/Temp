@@ -1,0 +1,45 @@
+字符串：
+"1. 升级过程中请勿断电或重启设备。\n\n"
+"2. 请确保电量充足且网络连接稳定。\n\n"
+"3. 升级可能需要几分钟，请耐心等待直至完成。",
+"1. Do NOT power off or restart the device during the update.\n\n"
+"2. Ensure sufficient battery and a stable network connection.\n\n"
+"3. The update may take several minutes; please wait until it finishes.",
+"1. 升級過程中請勿斷電或重啟設備。\n\n"
+"2. 請確保電量充足且網路連線穩定。\n\n"
+"3. 升級可能需要數分鐘，請耐心等候直至完成。",
+"1. N'éteignez pas et ne redémarrez pas l'appareil pendant la mise à jour.\n\n"
+"2. Assurez-vous d'une batterie suffisante et d'une connexion réseau stable.\n\n"
+"3. La mise à jour peut prendre plusieurs minutes ; veuillez patienter.",
+"1. Schalten Sie das Gerät während des Updates nicht aus und starten Sie es nicht neu.\n\n"
+"2. Stellen Sie ausreichend Akkuladung und eine stabile Netzwerkverbindung sicher.\n\n"
+"3. Das Update kann einige Minuten dauern; bitte warten Sie.",1. Non spegnere o riavviare il dispositivo durante l'aggiornamento.
+"1. Non spegnere o riavviare il dispositivo durante l'aggiornamento.\n\n"
+"2. Assicurarsi di avere batteria sufficiente e connessione di rete stabile.\n\n"
+"3. L'aggiornamento può richiedere alcuni minuti; attendere il completamento.",
+"1. アップデート中は電源を切ったり再起動しないでください。\n\n"
+"2. 十分なバッテリーと安定したネットワークを確保してください。\n\n"
+"3. アップデートには数分かかる場合があります。完了までお待ちください。",
+"1. Não desligue nem reinicie o dispositivo durante a atualização.\n\n"
+"2. Garanta bateria suficiente e ligação de rede estável.\n\n"
+"3. A atualização pode demorar vários minutos; aguarde até concluir.",
+"1. Не отключайте питание и не перезагружайте устройство во время обновления.\n\n"
+"2. Убедитесь в достаточном заряде и стабильном сетевом подключении.\n\n"
+"3. Обновление может занять несколько минут; дождитесь завершения.",
+"1. No apague ni reinicie el dispositivo durante la actualización.\n\n"
+"2. Asegúrese de tener batería suficiente y conexión de red estable.\n\n"
+"3. La actualización puede tardar varios minutos; espere a que termine.",
+"1. Nie wyłączaj zasilania ani nie uruchamiaj ponownie urządzenia podczas aktualizacji.\n\n"
+"2. Zapewnij wystarczający poziom baterii i stabilne połączenie sieciowe.\n\n"
+"3. Aktualizacja może potrwać kilka minut; poczekaj na zakończenie.",
+"1. Güncelleme sırasında cihazı kapatmayın veya yeniden başlatmayın.\n\n"
+"2. Yeterli pil ve kararlı ağ bağlantısı sağlayın.\n\n"
+"3. Güncelleme birkaç dakika sürebilir; tamamlanana kadar bekleyin.",
+"1. 업데이트 중에는 전원을 끄거나 재부팅하지 마세요.\n\n"
+"2. 충분한 배터리와 안정적인 네트워크를 확인하세요.\n\n"
+"3. 업데이트는 몇 분 걸릴 수 있습니다. 완료될 때까지 기다려 주세요.",
+"1. Schakel het apparaat niet uit en start het niet opnieuw tijdens de update.\n\n"
+"2. Zorg voor voldoende batterij en een stabiele netwerkverbinding.\n\n"
+"3. De update kan enkele minuten duren; wacht tot deze is voltooid.",
+
+符号：

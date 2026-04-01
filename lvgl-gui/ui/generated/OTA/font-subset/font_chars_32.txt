@@ -1,0 +1,32 @@
+字符串：
+是否确认升级?
+Do you want to upgrade?
+是否確認升級？
+Confirmer la mise à jour ?
+Upgrade bestätigen?
+Confermare l'aggiornamento?
+アップデートを確認しますか？
+Confirmar atualização?
+Подтвердить обновление?
+¿Confirmar actualización?
+Potwierdzić aktualizację?
+Güncellemeyi onaylıyor musunuz?
+업데이트를 확인할까요?
+Update bevestigen?
+检查更新
+Check for Updates
+檢查更新
+Vérifier les mises à jour
+Nach Updates suchen
+Controlla aggiornamenti
+更新を確認
+Procurar atualizações
+Проверить обновления
+Buscar actualizaciones
+Sprawdź aktualizacje
+Güncellemeleri denetle
+업데이트 확인
+Controleren op updates
+
+符号：
+LV_SYMBOL_REFRESH

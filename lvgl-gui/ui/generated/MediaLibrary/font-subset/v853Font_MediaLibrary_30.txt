@@ -1,0 +1,254 @@
+字符串：
+zoom: 100%
+zoom: %d%%
+--
+%d%%
+%s\n%s
+%s %.2d.%.2dG / %.2d.%.2dG\n%s %.2d.%.2dG
+已找到
+Found
+Trouvé
+Gefunden
+Trovato
+見つかりました
+Encontrado
+Найдено
+Znaleziono
+Bulundu
+찾음
+Gevonden
+照片
+photos
+photo
+Foto
+写真
+fotografia
+фотография
+foto
+zdjęcie
+fotoğraf
+사진
+\n\n\n\n\n\n未找到照片\n
+\n\n\n\n\n\nNo photo found\n
+\n\n\n\n\n\nAucune photo trouvée\n
+\n\n\n\n\n\nFoto nicht gefunden\n
+\n\n\n\n\n\nFoto non trovata\n
+\n\n\n\n\n\n写真が見つかりません\n
+\n\n\n\n\n\nFoto não encontrada\n
+\n\n\n\n\n\nФото не найдено\n
+\n\n\n\n\n\nNo se encontró la foto\n
+\n\n\n\n\n\nNie znaleziono zdjęcia\n
+\n\n\n\n\n\nFotoğraf bulunamadı\n
+\n\n\n\n\n\n사진을 찾을 수 없습니다\n
+\n\n\n\n\n\nFoto niet gevonden\n
+请查看目录:
+Please check the table of contents:
+請查看目錄：
+Veuillez consulter le catalogue :
+Bitte sehen Sie das Inhaltsverzeichnis ein:
+Per favore, consulta l'indice:
+目次をご覧ください：
+Por favor, consulte o índice:
+Пожалуйста, посмотрите каталог:
+Por favor, consulte el índice:
+Proszę sprawdzić spis treści:
+Lütfen içeriğe bakın:
+목차를 확인해 주세요:
+Bekijk de inhoudsopgave:
+\n\n\n\n\n支援的格式: .jpg, .jpeg\n
+\n\n\n\n\nSupported formats: .jpg, .jpeg\n
+\n\n\n\n\n支持的格式: .jpg, .jpeg\n
+\n\n\n\n\nFormats pris en charge: .jpg, .jpeg\n
+\n\n\n\n\nUnterstützte Formate: .jpg, .jpeg\n
+\n\n\n\n\nFormati supportati: .jpg, .jpeg\n
+\n\n\n\n\nサポートされている形式: .jpg, .jpeg\n
+\n\n\n\n\nFormatos suportados: .jpg, .jpeg\n
+\n\n\n\n\nПоддерживаемые форматы: .jpg, .jpeg\n
+\n\n\n\n\nFormatos admitidos: .jpg, .jpeg\n
+\n\n\n\n\nObsługiwane formaty: .jpg, .jpeg\n
+\n\n\n\n\nDesteklenen formatlar: .jpg, .jpeg\n
+\n\n\n\n\n지원되는 형식: .jpg, .jpeg\n
+\n\n\n\n\nOndersteunde formaten: .jpg, .jpeg\n
+确认要删除这张照片吗?
+Delete this photo?
+確認要刪除這張照片嗎？
+Supprimer cette photo ?
+Dieses Foto löschen?
+Eliminare questa foto?
+この写真を削除しますか？
+Eliminar esta fotografia?
+Удалить это фото?
+¿Eliminar esta foto?
+Usunąć to zdjęcie?
+Bu fotoğraf silinsin mi?
+이 사진을 삭제할까요?
+Deze foto verwijderen?
+是
+Yes
+Oui
+Ja
+Sì
+はい
+Sim
+Да
+Sí
+Tak
+Evet
+예
+否
+No
+Non
+Nein
+いいえ
+Não
+Нет
+Nie
+Hayır
+아니오
+Nee
+确认要格式化存储卡吗?
+Format storage card?
+是否格式化儲存空間？
+Formater la carte mémoire ?
+Speicherkarte formatieren?
+Formattare la scheda?
+ストレージをフォーマットしますか？
+Formatar o cartão de memória?
+Форматировать карту памяти?
+¿Formatear la tarjeta de memoria?
+Sformatować kartę pamięci?
+Hafıza kartı biçimlendirilsin mi?
+저장 공간을 포맷할까요?
+Geheugenkaart formatteren?
+未检测到TF卡
+TF Card Not Detected
+未檢測到TF卡
+Carte TF non détectée
+TF-Karte nicht erkannt
+Scheda TF non rilevata
+TFカードが検出されません
+Cartão TF não detetado
+Карта TF не обнаружена
+Tarjeta TF no detectada
+Nie wykryto karty TF
+TF kartı algılanmadı
+TF 카드가 감지되지 않음
+TF-kaart niet gedetecteerd
+请插入TF卡后重试
+Please insert TF card
+請插入TF卡後重試
+Veuillez insérer la carte TF
+Bitte TF-Karte einlegen
+Inserire la scheda TF
+TFカードを挿入してください
+Introduza o cartão TF
+Вставьте карту TF
+Inserte la tarjeta TF
+Włóż kartę TF
+Lütfen TF kartını takın
+TF 카드를 삽입하세요
+Plaats de TF-kaart
+已使用
+Used
+Utilisé
+Belegt
+Usato
+使用済み
+Usado
+Занято
+Zajęte
+Kullanılan
+사용됨
+Gebruikt
+可用
+Free
+Libre
+Frei
+Libero
+空き
+Livre
+Свободно
+Wolne
+Boş
+여유
+Vrij
+格式化存储
+Format Storage
+格式化儲存
+Formater le stockage
+Speicher formatieren
+Formatta memoria
+ストレージをフォーマット
+Formatar armazenamento
+Форматировать накопитель
+Formatear almacenamiento
+Formatuj pamięć
+Depolamayı biçimlendir
+저장소 포맷
+Opslag formatteren
+格式化成功
+Format Successful
+Formatage réussi
+Formatierung erfolgreich
+Formattazione riuscita
+フォーマット成功
+Formatação bem-sucedida
+Форматирование выполнено
+Formateo correcto
+Formatowanie powiodło się
+Biçimlendirme başarılı
+포맷 성공
+Formatteren gelukt
+格式化失败
+Format Failed
+格式化失敗
+Échec du formatage
+Formatierung fehlgeschlagen
+Formattazione non riuscita
+フォーマット失敗
+Falha na formatação
+Ошибка форматирования
+Error al formatear
+Błąd formatowania
+Biçimlendirme başarısız
+포맷 실패
+Formatteren mislukt
+录像
+videos
+錄像
+Vidéo
+Videoaufnahme
+videoregistrazione
+ビデオ録画
+Gravação de vídeo
+видео
+video
+Nagranie wideo
+Video kaydı
+영상 녹화
+videopname
+确认要删除这个视频吗?
+Delete this video?
+確認要刪除此影片嗎？
+Supprimer cette vidéo ?
+Dieses Video löschen?
+Eliminare questo video?
+この動画を削除しますか？
+Eliminar este vídeo?
+Удалить это видео?
+¿Eliminar este vídeo?
+Usunąć to wideo?
+Bu video silinsin mi?
+이 동영상을 삭제할까요?
+Deze video verwijderen?
+ !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+0123456789
+abcdefghijklmnopqrstuvwxyz
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+符号：
+LV_SYMBOL_CLOSE
+LV_SYMBOL_REFRESH
+LV_SYMBOL_IMAGE
+LV_SYMBOL_VIDEO
+LV_SYMBOL_SD_CARD
