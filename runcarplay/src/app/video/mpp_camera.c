@@ -54,7 +54,7 @@ static void savePic(mpp_camera_para_conf *pContext);
 
 #define AI2MUX 
 #define TACKPIC
-#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (64*1024)
+#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (512*1024)
 #define ISP_RUN (1)
 
 extern int g_g2dfd;
@@ -1861,7 +1861,7 @@ static ERRORTYPE configMuxChnAttr(mpp_camera_para_conf *pContext, MUX_CHN_ATTR_S
         break;
     }
     pContext->m_mux.mMuxChnAttr.mCallbackOutFlag = false;
-    pContext->m_mux.mMuxChnAttr.mFsWriteMode = FSWRITEMODE_DIRECT;
+    pContext->m_mux.mMuxChnAttr.mFsWriteMode = FSWRITEMODE_CACHETHREAD;
     pContext->m_mux.mMuxChnAttr.mSimpleCacheSize = DEFAULT_SIMPLE_CACHE_SIZE_VFS;
 
 

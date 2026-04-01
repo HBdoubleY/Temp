@@ -11,6 +11,9 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sched.h>
+#include <errno.h>
+#include <stdint.h>
 #include <time.h>
 
 #define LINK_TYPE_CARPLAY       2
@@ -23,18 +26,34 @@ static LIBZLINK_HANDLE g_handle;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
+#define ZLINK_METRICS_LOG_INTERVAL_US (2ULL * 1000 * 1000)
+#define ZLINK_VIDEO_CB_PRIO          8
 
 typedef struct {
 	char *data;
 	int len;
 } prebuf_packet_t;
 
+typedef struct {
+	uint64_t cb_total;
+	uint64_t active_forward_total;
+	uint64_t active_forward_fail;
+	uint64_t prebuf_drop_total;
+	uint64_t max_gap_us;
+	uint64_t last_cb_us;
+	uint64_t last_log_us;
+	int priority_attempted;
+} zlink_video_metrics_t;
+
 static struct {
 	prebuf_packet_t slot[PREBUF_PACKET_CAP];
+	int head;
+	int tail;
 	int count;
 	int active;
 	int pending_home_link_type;
 	int session_started;
+	zlink_video_metrics_t metrics;
 	pthread_mutex_t mutex;
 } g_video_state = {
 	.mutex = PTHREAD_MUTEX_INITIALIZER,
@@ -49,6 +68,64 @@ static struct {
 } g_video_dump = {
 	.mutex = PTHREAD_MUTEX_INITIALIZER,
 };
+
+static uint64_t monotonic_time_us(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000 * 1000 + (uint64_t)ts.tv_nsec / 1000;
+}
+
+static void zlink_video_try_raise_priority_locked(void)
+{
+	struct sched_param param;
+	int ret;
+
+	if (g_video_state.metrics.priority_attempted)
+		return;
+	g_video_state.metrics.priority_attempted = 1;
+
+	memset(&param, 0, sizeof(param));
+	param.sched_priority = ZLINK_VIDEO_CB_PRIO;
+	ret = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+	if (ret == 0) {
+		printf("[zlink_client] video callback thread priority raised policy=%d prio=%d\n",
+		       SCHED_RR, param.sched_priority);
+	} else {
+		printf("[zlink_client] video callback priority raise failed ret=%d (%s)\n",
+		       ret, strerror(ret));
+	}
+}
+
+static void zlink_video_metrics_note_locked(int active, int feed_ret, uint64_t now_us)
+{
+	if (g_video_state.metrics.last_cb_us != 0) {
+		uint64_t gap_us = now_us - g_video_state.metrics.last_cb_us;
+		if (gap_us > g_video_state.metrics.max_gap_us)
+			g_video_state.metrics.max_gap_us = gap_us;
+	}
+	g_video_state.metrics.last_cb_us = now_us;
+	g_video_state.metrics.cb_total++;
+	if (active) {
+		g_video_state.metrics.active_forward_total++;
+		if (feed_ret != 0)
+			g_video_state.metrics.active_forward_fail++;
+	}
+	if (g_video_state.metrics.last_log_us == 0)
+		g_video_state.metrics.last_log_us = now_us;
+	if (now_us - g_video_state.metrics.last_log_us >= ZLINK_METRICS_LOG_INTERVAL_US) {
+		printf("[zlink_client] stats cb=%llu active=%llu feed_fail=%llu prebuf_drop=%llu prebuf_depth=%d max_gap_us=%llu\n",
+		       (unsigned long long)g_video_state.metrics.cb_total,
+		       (unsigned long long)g_video_state.metrics.active_forward_total,
+		       (unsigned long long)g_video_state.metrics.active_forward_fail,
+		       (unsigned long long)g_video_state.metrics.prebuf_drop_total,
+		       g_video_state.count,
+		       (unsigned long long)g_video_state.metrics.max_gap_us);
+		g_video_state.metrics.last_log_us = now_us;
+		g_video_state.metrics.max_gap_us = 0;
+	}
+}
 
 static int packet_has_sps(const char *data, int len)
 {
@@ -66,12 +143,16 @@ static int packet_has_sps(const char *data, int len)
 
 static void prebuf_clear_locked(void)
 {
-	for (int i = 0; i < g_video_state.count; i++) {
-		free(g_video_state.slot[i].data);
-		g_video_state.slot[i].data = NULL;
-		g_video_state.slot[i].len = 0;
+	while (g_video_state.count > 0) {
+		prebuf_packet_t *slot = &g_video_state.slot[g_video_state.head];
+		free(slot->data);
+		slot->data = NULL;
+		slot->len = 0;
+		g_video_state.head = (g_video_state.head + 1) % PREBUF_PACKET_CAP;
+		g_video_state.count--;
 	}
-	g_video_state.count = 0;
+	g_video_state.head = 0;
+	g_video_state.tail = 0;
 }
 
 static void prebuf_clear(void)
@@ -83,6 +164,9 @@ static void prebuf_clear(void)
 
 static void prebuf_push_locked(const char *data, int len)
 {
+	prebuf_packet_t *slot;
+	char *copy;
+
 	if (len <= 0 || len > PREBUF_PACKET_MAX)
 		return;
 
@@ -90,18 +174,23 @@ static void prebuf_push_locked(const char *data, int len)
 		prebuf_clear_locked();
 
 	if (g_video_state.count >= PREBUF_PACKET_CAP) {
-		free(g_video_state.slot[0].data);
-		memmove(&g_video_state.slot[0], &g_video_state.slot[1],
-		        sizeof(g_video_state.slot[0]) * (PREBUF_PACKET_CAP - 1));
-		g_video_state.count = PREBUF_PACKET_CAP - 1;
+		slot = &g_video_state.slot[g_video_state.head];
+		free(slot->data);
+		slot->data = NULL;
+		slot->len = 0;
+		g_video_state.head = (g_video_state.head + 1) % PREBUF_PACKET_CAP;
+		g_video_state.count--;
+		g_video_state.metrics.prebuf_drop_total++;
 	}
 
-	char *copy = (char *)malloc((size_t)len);
+	copy = (char *)malloc((size_t)len);
 	if (!copy)
 		return;
 	memcpy(copy, data, (size_t)len);
-	g_video_state.slot[g_video_state.count].data = copy;
-	g_video_state.slot[g_video_state.count].len = len;
+	slot = &g_video_state.slot[g_video_state.tail];
+	slot->data = copy;
+	slot->len = len;
+	g_video_state.tail = (g_video_state.tail + 1) % PREBUF_PACKET_CAP;
 	g_video_state.count++;
 }
 
@@ -148,15 +237,26 @@ static void session_init(void)
 
 static int video_data_cb(char *data, int len, struct VIDEO_SCREEN_INFO *info, void *user_data)
 {
+	uint64_t now_us;
+	int active;
+	int feed_ret = 0;
+
 	(void)info;
 	(void)user_data;
 	if (data && len > 0) {
+		now_us = monotonic_time_us();
 		pthread_mutex_lock(&g_video_state.mutex);
-		prebuf_push_locked(data, len);
-		int active = g_video_state.active;
+		zlink_video_try_raise_priority_locked();
+		active = g_video_state.active;
+		if (!active)
+			prebuf_push_locked(data, len);
 		pthread_mutex_unlock(&g_video_state.mutex);
 		if (active)
-			carplay_display_feed_h264(data, len);
+			feed_ret = carplay_display_feed_h264(data, len);
+
+		pthread_mutex_lock(&g_video_state.mutex);
+		zlink_video_metrics_note_locked(active, feed_ret, now_us);
+		pthread_mutex_unlock(&g_video_state.mutex);
 
 		pthread_mutex_lock(&g_video_dump.mutex);
 		if (g_video_dump.enabled && g_video_dump.fp) {
@@ -167,6 +267,27 @@ static int video_data_cb(char *data, int len, struct VIDEO_SCREEN_INFO *info, vo
 		pthread_mutex_unlock(&g_video_dump.mutex);
 	}
 	return 0;
+}
+
+static int zlink_client_stop_projection_if_active(int clear_link_type)
+{
+	int active;
+	int link_to_pending;
+
+	pthread_mutex_lock(&g_video_state.mutex);
+	active = g_video_state.active;
+	link_to_pending = g_sys_Data.linktype;
+	if (active) {
+		g_video_state.active = 0;
+		g_video_state.pending_home_link_type = link_to_pending;
+	}
+	pthread_mutex_unlock(&g_video_state.mutex);
+
+	if (clear_link_type)
+		g_sys_Data.linktype = 0;
+	if (active)
+		carplay_display_destroy();
+	return active;
 }
 
 static int session_state_cb(enum LIBZLINK_SESSION_STATE session_state, enum PHONE_TYPE phone_type, void *user_data)
@@ -189,23 +310,10 @@ static int session_state_cb(enum LIBZLINK_SESSION_STATE session_state, enum PHON
 		else
 			libzlink_video_focus(1);
 	} else {
-		/* session ended or not started: clear session flag and linktype; if currently projecting, do same cleanup as video_focus_cb(1) */
-		int active;
-		int link_to_pending;
-
 		pthread_mutex_lock(&g_video_state.mutex);
 		g_video_state.session_started = 0;
-		active = g_video_state.active;
-		link_to_pending = g_sys_Data.linktype;
-		if (active) {
-			g_video_state.active = 0;
-			g_video_state.pending_home_link_type = link_to_pending;
-		}
 		pthread_mutex_unlock(&g_video_state.mutex);
-
-		g_sys_Data.linktype = 0;
-		if (active)
-			carplay_display_destroy();
+		zlink_client_stop_projection_if_active(1);
 	}
 	return 0;
 }
@@ -232,11 +340,7 @@ static int video_focus_cb(int is_hu_focus_on, void *user_data)
 
 	if (is_hu_focus_on) {
 		printf("video_focus_request: request back to HU HMI\n");
-		pthread_mutex_lock(&g_video_state.mutex);
-		g_video_state.active = 0;
-		g_video_state.pending_home_link_type = g_sys_Data.linktype;
-		pthread_mutex_unlock(&g_video_state.mutex);
-		carplay_display_destroy();
+		zlink_client_stop_projection_if_active(0);
 	} else {
 		printf("video_focus_request: request back to phone HMI\n");
 	}
@@ -325,8 +429,19 @@ void zlink_client_set_video_active(int active)
 	pthread_mutex_lock(&g_video_state.mutex);
 	if (active) {
 		g_video_state.active = 1;
-		for (int i = 0; i < g_video_state.count; i++)
-			carplay_display_feed_h264(g_video_state.slot[i].data, g_video_state.slot[i].len);
+		while (g_video_state.count > 0) {
+			prebuf_packet_t pkt = g_video_state.slot[g_video_state.head];
+			g_video_state.slot[g_video_state.head].data = NULL;
+			g_video_state.slot[g_video_state.head].len = 0;
+			g_video_state.head = (g_video_state.head + 1) % PREBUF_PACKET_CAP;
+			g_video_state.count--;
+			pthread_mutex_unlock(&g_video_state.mutex);
+			carplay_display_feed_h264(pkt.data, pkt.len);
+			free(pkt.data);
+			pthread_mutex_lock(&g_video_state.mutex);
+		}
+		g_video_state.head = 0;
+		g_video_state.tail = 0;
 	} else {
 		g_video_state.active = 0;
 		prebuf_clear_locked();

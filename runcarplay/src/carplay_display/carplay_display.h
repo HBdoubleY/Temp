@@ -7,9 +7,29 @@ extern "C" {
 
 #ifdef ENABLE_CARPLAY
 
+typedef struct {
+	int link_type;
+	int disp_x;
+	int disp_y;
+	int disp_width;
+	int disp_height;
+	int session_width;
+	int session_height;
+	int decode_width;
+	int decode_height;
+	int rotation;
+	int scaling_mode;
+	int frame_region_x;
+	int frame_region_y;
+	int frame_region_width;
+	int frame_region_height;
+} carplay_display_policy_t;
 
-int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_height,
-                          int session_width, int session_height);
+int carplay_display_build_policy(int link_type, int disp_x, int disp_y,
+                                 int disp_width, int disp_height,
+                                 carplay_display_policy_t *policy);
+
+int carplay_display_create(const carplay_display_policy_t *policy);
 
 int carplay_display_feed_h264(const char *data, int len);
 

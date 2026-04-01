@@ -214,6 +214,7 @@ static void update_clock_hands(analog_clock_t* clock, uint8_t hour, uint8_t minu
     
     if (clock->hour_img && lv_obj_check_type(clock->hour_img, &lv_img_class)) {
         lv_img_set_angle(clock->hour_img, (int16_t)(hour_deg * 10));  // LVGL角度单位是0.1度
+    } else if (clock->hour_img) {
         lv_obj_set_style_transform_angle(clock->hour_img, (int32_t)(hour_deg * 10), 0);
     }
     

@@ -134,12 +134,12 @@ static void screen_btn_carplay_event_handler (lv_event_t *e)
 		{
 			/* 仅当 session 已启动且当前为 CarPlay 连接时才进入投屏界面，否则只进提示界面 */
 			if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_CARPLAY) {
+				carplay_display_policy_t policy;
 				zlink_client_reset_video_prebuffer();
 				zlink_client_request_video_focus(1);
 				request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-				int disp_w = 720;
-				int disp_h = 1440;
-				carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+				if (carplay_display_build_policy(LINK_TYPE_CARPLAY, 0, 0, 720, 1440, &policy) == 0)
+					carplay_display_create(&policy);
 				zlink_client_set_video_active(1);
 				zlink_client_request_video_focus(0);
 				request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
@@ -168,12 +168,12 @@ static void screen_btn_androidauto_event_handler(lv_event_t *e){
 		{
 			/* 仅当 session 已启动且当前为 Android Auto 连接时才进入投屏界面，否则只进提示界面 */
 			if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_ANDROIDAUTO) {
+				carplay_display_policy_t policy;
 				zlink_client_reset_video_prebuffer();
 				zlink_client_request_video_focus(1);
 				request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-				int disp_w = 720;
-				int disp_h = 1440;
-				carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+				if (carplay_display_build_policy(LINK_TYPE_ANDROIDAUTO, 0, 0, 720, 1440, &policy) == 0)
+					carplay_display_create(&policy);
 				zlink_client_set_video_active(1);
 				zlink_client_request_video_focus(0);
 				request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);

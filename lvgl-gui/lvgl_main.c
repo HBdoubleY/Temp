@@ -436,7 +436,7 @@ static void tire_ui_refresh_timer_cb(lv_timer_t *timer) {
 
 static bool touch_pressed = false;
 static int last_x = -1, last_y = -1;
-#define TOUCH_MOVE_THRESHOLD 1
+#define TOUCH_MOVE_THRESHOLD 10
 #define TOUCH_MOVE_THRESHOLD_SQ (TOUCH_MOVE_THRESHOLD * TOUCH_MOVE_THRESHOLD)
 
 void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
@@ -468,7 +468,7 @@ void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
             touch_pressed = true;
             last_x = point.x;
             last_y = point.y;
-            printf("###### DOWN - screen touch point: x=%d, y=%d\n", point.x, point.y);
+//            printf("###### DOWN - screen touch point: x=%d, y=%d\n", point.x, point.y);
         }
         break;
         
@@ -484,8 +484,7 @@ void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
                 request_link_touchevent(type, true, point.x, point.y);
                 last_x = point.x;
                 last_y = point.y;
-                printf("###### MOVE - screen touch point: x=%d, y=%d (dx=%d, dy=%d, dist=%.1f)\n", 
-                    point.x, point.y, dx, dy, sqrt((float)distance_sq));
+//                printf("###### MOVE - screen touch point: x=%d, y=%d (dx=%d, dy=%d, dist=%.1f)\n", point.x, point.y, dx, dy, sqrt((float)distance_sq));
             }
         }
         break;
@@ -493,16 +492,71 @@ void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
     case LV_EVENT_RELEASED:
 
         if (touch_pressed) {
-            // request_link_touchevent(type, false, point.x, point.y);
-            request_link_touchevent(type, false, last_x, last_y);
+            request_link_touchevent(type, false, point.x, point.y);
+            // request_link_touchevent(type, false, last_x, last_y);
             touch_pressed = false;
-            printf("###### UP - screen touch point: x=%d, y=%d\n", point.x, point.y);
+//            printf("###### UP - screen touch point: x=%d, y=%d\n", point.x, point.y);
         }
         break;
     default:
         break;
     }
 }
+// void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
+//     lv_obj_t* current_screen = lv_scr_act();
+//     lv_indev_t *indev = lv_indev_get_act();
+//     lv_point_t point;
+//     LinkType type;
+
+//     //screen save
+//     if(g_sys_Data.agingMode.screenSaveSw){
+//         resetDashAnalogTimer(g_sys_Data.agingMode.screenSaveTime * 1000);
+//     }
+
+//     if(current_screen == guider_ui.screen_androidAuto){
+//         type = LINK_TYPE_ANDROIDAUTO;
+//     }else if(current_screen == guider_ui.screen_carPlay){
+//         type = LINK_TYPE_CARPLAY;
+//     }else{
+//         return;
+//     }
+
+//     // 关键修改：使用 indev 获取当前坐标，而不是在事件中再次获取
+//     lv_indev_get_point(indev, &point);
+    
+//     switch (event){
+//     case LV_EVENT_PRESSED:    
+//         if (!touch_pressed) {
+//             request_link_touchevent(type, true, point.x, point.y);
+//             touch_pressed = true;
+//             last_x = point.x;
+//             last_y = point.y;
+//             printf("DOWN: %d,%d\n", point.x, point.y);
+//         }
+//         break;
+        
+//     case LV_EVENT_PRESSING:
+//         if (touch_pressed) {
+//             int dx = point.x - last_x;
+//             int dy = point.y - last_y;
+//             if (dx*dx + dy*dy > TOUCH_MOVE_THRESHOLD_SQ) {
+//                 request_link_touchevent(type, true, point.x, point.y);
+//                 last_x = point.x;
+//                 last_y = point.y;
+//                 printf("MOVE: %d,%d\n", point.x, point.y);
+//             }
+//         }
+//         break;
+        
+//     case LV_EVENT_RELEASED:
+//         if (touch_pressed) {
+//             request_link_touchevent(type, false, point.x, point.y);
+//             touch_pressed = false;
+//             printf("UP: %d,%d\n", point.x, point.y);
+//         }
+//         break;
+//     }
+// }
 #endif
 
 #ifdef ENABLE_CARPLAY
@@ -584,12 +638,12 @@ static void lvgl_handle_zlink_ui_requests(void)
 
     if (session_rising && on_target_screen) {
         if (linktype == LINK_TYPE_CARPLAY) {
+            carplay_display_policy_t policy;
             zlink_client_reset_video_prebuffer();
             zlink_client_request_video_focus(1);
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-            int disp_w = 720;
-            int disp_h = 1440;
-            carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            if (carplay_display_build_policy(LINK_TYPE_CARPLAY, 0, 0, 720, 1440, &policy) == 0)
+                carplay_display_create(&policy);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
@@ -597,12 +651,12 @@ static void lvgl_handle_zlink_ui_requests(void)
                                   &guider_ui.screen_del, setup_scr_screen_carPlay,
                                   LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
         } else if (linktype == LINK_TYPE_ANDROIDAUTO) {
+            carplay_display_policy_t policy;
             zlink_client_reset_video_prebuffer();
             zlink_client_request_video_focus(1);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-            int disp_w = 720;
-            int disp_h = 1440;
-            carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            if (carplay_display_build_policy(LINK_TYPE_ANDROIDAUTO, 0, 0, 720, 1440, &policy) == 0)
+                carplay_display_create(&policy);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
@@ -714,7 +768,7 @@ int lvgl_main(int w, int h)
     }
 
     lv_timer_create(bt_status_check_timer, 500, NULL);
-	tire_ui_refresh_now();
+//	tire_ui_refresh_now();
 //--------------------------------------------------------------
     /*Handle LitlevGL tasks (tickless mode)*/
     while(1) {

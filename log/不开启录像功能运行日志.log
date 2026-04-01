@@ -1,0 +1,763 @@
+session_state_cb: session_state = 4, phone_type = 5
+
+
+[14:53:55.233]libzlink_video_focus in, set hu_video_focus = 1
+[14:53:55.233]libzlink_video_focus out
+[14:53:55.234]libzlink_video_focus in, set hu_video_focus = 1
+[z-link][14:53:55.239]-------------Dont send disable BT to BT server!
+--------------TODO--------DebugCopyStackTrace
+2026-04-01 02:53:55.246426 PM ### [ASSERT] AirPlayReceiverSession.c:5403 "AirPlayReceiverSessionChangeModes", -6709/0xFFFFE5CB kStateErr 
+--------------TODO--------DebugCopyStackTrace
+2026-04-01 02:53:55.246664 PM ### [ASSERT] AirPlayReceiverSession.c:5483 "AirPlayReceiverSessionChangeResourceMode", -6709/0xFFFFE5CB kStateErr 
+[z-link][14:53:55.246]----------------cp_video_focus: is_cp_on  to HU 
+[z-link][14:53:55.247]cmd_focus_handle: is_hu_video_focus_on = 1
+[z-link][14:53:55.247]session_state = 4, current_device = 5 airplay_is_running= 0
+[z-link][14:53:55.247]----------------cp_video_focus: is_hu_on = 1
+--------------TODO--------DebugCopyStackTrace
+2026-04-01 02:53:55.247369 PM ### [ASSERT] AirPlayReceiverSession.c:5403 "AirPlayReceiverSessionChangeModes", -6709/0xFFFFE5CB kStateErr 
+--------------TODO--------DebugCopyStackTrace
+2026-04-01 02:53:55.247509 PM ### [ASSERT] AirPlayReceiverSession.c:5483 "AirPlayReceiverSessionChangeResourceMode", -6709/0xFFFFE5CB kStateErr 
+[z-link][14:53:55.247]----------------cp_video_focus: is_cp_on  to HU 
+[14:53:55.234]libzlink_video_focus out
+2026-04-01 02:53:55.262481 PM [HID] HID browser starting...
+2026-04-01 02:53:55.265389 PM [HID] HID device starting...
+2026-04-01 02:53:55.265690 PM [HID] HID device starting...
+2026-04-01 02:53:55.265846 PM [HID] HID device starting...
+2026-04-01 02:53:55.265972 PM [HID] HID device starting...
+2026-04-01 02:53:55.266117 PM [HID] HID browser started
+2026-04-01 02:53:55.266204 PM [HID] HID device started
+2026-04-01 02:53:55.267698 PM [HID] HID device started
+2026-04-01 02:53:55.267870 PM [HID] HID device started
+2026-04-01 02:53:55.267946 PM [HID] HID device started
+2026-04-01 02:53:55.268610 PM [AirPlay] HID started
+E0401 14:53:55.272419  1271 VideoDec_InputThread.c:70] <InputThread> VideoDecoder InputThread start run...
+I0401 14:53:55.275184  1023 hwdisplay.c:1269] <hwd_get_disp_type> Current the  disp_type:0x1  tv_mode:0x0
+I0401 14:53:55.295697  1023 hwdisplay.c:1142] <hwd_layer_request_hlay> hlay:0, zorder=0, cnt:2
+I0401 14:53:55.302048  1023 hwdisplay.c:404] <hwd_layer_set_rect> ch[0]lyl[0]: screen_win[0,0, 720x1440]
+[z-link][14:53:55.310]zlink zbt: MESSAGE_ZBT_LINK_INFO
+[z-link][14:53:55.310]zlink: zbt link info message->phone_type:0
+[z-link][14:53:55.310]zlink: zbt link info message->is_connect:0
+[z-link][14:53:55.310]zlink: zbt link info message->is_pair:1
+[z-link][14:53:55.311]zlink: zbt link info message->local_mac_address:4CA38FF9976A
+[z-link][14:53:55.311]zlink: zbt link info message_connect_handle: bt_disconnect_event_handle
+[z-link][14:53:55.315]
+
+-------------------kAirPlayKey_NightMode
+[z-link][14:53:55.320]
+
+-------------------kAirPlayProperty_OEMIconVisible
+[z-link][14:53:55.320]
+
+-------------------kAirPlayKey_RightHandDrive
+E0401 14:53:55.302263  1023 mpi_vo.c:1858] <AW_MPI_VO_SetVideoScalingMode> unsupported temporary
+2026-04-01 02:53:55.339538 PM [AirPlay] Record
+2026-04-01 02:53:55.344625 PM [AirPlay] AirPlay session started: From=Car D=0xdca4ca1967ec A=[fe80::448:e870:40:b565%wlan0]:49659 T=Enet C=? L=0 ms Bonjour=0 ms Conn=0 ms Auth=0 ms Ann=0 ms Setup=0 ms Rec=4 ms: 0/0x0 noErr
+[z-link][14:53:55.410]cmd_focus_handle: is_hu_video_focus_on = 0
+[z-link][14:53:55.410]session_state = 4, current_device = 5 airplay_is_running= 0
+[z-link][14:53:55.410]----------------cp_video_focus: is_hu_on = 0
+[z-link][14:53:55.414]----------------cp_video_focus: is_hu_on  to CP 
+W0401 14:53:55.868244  1269 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:53:56.013904 PM [AirPlay] Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:53:56.014]Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+2026-04-01 02:53:56.024873 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:53:56.025]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+
+[14:53:55.238]libzlink: request_disableBT_cb
+[14:53:55.238]libzlink: request_disableBT_cb: no callback
+HFP disconnected
+[carplay_display] VO scaling mode 1 unsupported, fallback to default path ret=0xa00f8008
+HFP disconnected
+INFO   : cedarc <CedarPluginVDInit_h264:73>: register h264 decoder success!
+INFO   : cedarc <CedarPluginVDInit_h265:82>: register h265 decoder success!
+INFO   : cedarc <CedarPluginVDInit_mjpeg:81>: register mjpeg decoder success!
+INFO   : cedarc <cdc_log_set_level:47>: Set log level to 5 from /vendor/etc/cedarc.conf
+WARNING: cedarc <InitializeVideoDecoder:475>: warning: the nDecodeSmoothFrameBufferNum is 0
+WARNING: cedarc <InitializeVideoDecoder:481>: warning: the nDeInterlaceHoldingFrameBufferNum is 0
+[14:53:55.362]libzlink_video_focus in, set hu_video_focus = 0
+[14:53:55.362]libzlink_video_focus out
+[14:53:56.015]libzlink: cp_mode_change_cb
+[14:53:56.015]libzlink: cp_mode_change_cb: no callback
+[14:53:56.025]libzlink: cp_mode_change_cb
+2026-04-01 02:53:56.039663 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:53:56.039]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+2026-04-01 02:53:56.053690 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:53:56.053]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[14:53:56.025]libzlink: cp_mode_change_cb: no callback
+[z-link][14:53:56.058]Disable Bluetooth session control request
+[z-link][14:53:56.059]-------------Dont send disable BT to BT server!
+2026-04-01 02:53:56.071414 PM [AirPlay] Setup
+CFDictionaryGetCString TextToSourceVersion: 6200802
+2026-04-01 02:53:56.099360 PM [ScreenStream] Screen stream started
+[z-link][14:53:56.200]zlink session_state_send: session_state = 4, current_device = 5
+[z-link][14:53:56.203]cmd_focus_handle: is_hu_video_focus_on = 0
+[z-link][14:53:56.203]session_state = 4, current_device = 5 airplay_is_running= 0
+W0401 14:53:56.293435  1272 CedarXNativeRenderer.cpp:157] <CedarXNativeRenderer> bufWidth[736]!=display_width[720]
+I0401 14:53:56.294420  1272 hwdisplay.c:240] <hwd_layer_set_src> x: 0, y: 0, width: 0x2d0, height: 0x5a0
+I0401 14:53:56.294781  1272 hwdisplay.c:247] <hwd_layer_set_src> width: 0x2d000000000, height: 0x5a000000000
+I0401 14:53:56.295022  1272 hwdisplay.c:367] <hwd_layer_set_src> set fb.format 99 77, color_space 260 end, size0[736x1440], size1[368x720]
+[14:53:56.040]libzlink: cp_mode_change_cb
+[14:53:56.040]libzlink: cp_mode_change_cb: no callback
+[14:53:56.054]libzlink: cp_mode_change_cb
+[14:53:56.054]libzlink: cp_mode_change_cb: no callback
+-----------MESSAGE_DISABLE_BT
+[14:53:56.059]libzlink: request_disableBT_cb
+[14:53:56.059]libzlink: request_disableBT_cb: no callback
+libzlink zlink_state_handle: session_state = 4
+libzlink zlink_state_handle: phone_type = 5
+[14:53:56.202]libzlink: session_state_cb
+
+
+
+session_state_cb: session_state = 4, phone_type = 5
+
+
+[14:53:56.202]libzlink_video_focus in, set hu_video_focus = 0
+[14:53:56.202]libzlink_video_focus out
+WARNING: cedarc <H264MallocBuffer:1386>:  h264 scale down fbm buffer number need double check!  
+[carplay_display] vo size 720x1440
+[carplay_display] vo rendering start
+###### DOWN - screen touch point: x=1146, y=338
+###### MOVE - screen touch point: x=1024, y=316 (dx=-122, dy=-22, dist=124.0)
+###### MOVE - screen touch point: x=944, y=323 (dx=-80, dy=7, dist=80.3)
+W0401 14:53:58.236312  1269 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:54:00.027822 PM [AirPlay] Request accessory UI
+[z-link][14:54:00.028]Request accessory UI: "null"
+[z-link][14:54:00.028]north_control_video_focus_request_send, 1
+E0401 14:54:00.029582  1047 mpi_sys.c:1892] <AW_MPI_SYS_UnBind> fatal error! srcChn[5,0,0] and dstChn[15,0,0] state not match [3]!=[3], can't unbind!
+E0401 14:54:00.029810  1047 mpi_sys.c:1892] <AW_MPI_SYS_UnBind> fatal error! srcChn[103,0,0] and dstChn[15,0,0] state not match [3]!=[3], can't unbind!
+E0401 14:54:02.412428  1294 VideoDec_InputThread.c:70] <InputThread> VideoDecoder InputThread start run...
+I0401 14:54:02.413012  1023 hwdisplay.c:1269] <hwd_get_disp_type> Current the  disp_type:0x1  tv_mode:0x0
+I0401 14:54:02.433353  1023 hwdisplay.c:1142] <hwd_layer_request_hlay> hlay:0, zorder=0, cnt:2
+I0401 14:54:02.434026  1023 hwdisplay.c:404] <hwd_layer_set_rect> ch[0]lyl[0]: screen_win[0,0, 720x1440]
+E0401 14:54:02.434216  1023 mpi_vo.c:1858] <AW_MPI_VO_SetVideoScalingMode> unsupported temporary
+319 (dx=-70, dy=-4, dist=70.1)
+###### MOVE - screen touch point: x=770, y=332 (dx=-104, dy=13, dist=104.8)
+###### UP - screen touch point: x=770, y=332
+###### DOWN - screen touch point: x=742, y=337
+###### MOVE - screen touch point: x=810, y=336 (dx=68, dy=-1, dist=68.0)
+###### MOVE - screen touch point: x=970, y=335 (dx=160, dy=-1, dist=160.0)
+###### MOVE - screen touch point: x=1020, y=335 (dx=50, dy=0, dist=50.0)
+###### MOVE - screen touch point: x=1218, y=319 (dx=198, dy=-16, dist=198.6)
+###### UP - screen touch point: x=1218, y=319
+###### DOWN - screen touch point: x=651, y=484
+###### UP - screen touch point: x=651, y=484
+-----------MESSAGE_VIDEO_FOCUS_REQUEST
+[14:54:00.028]libzlink: video_focus_request_cb
+[14:54:00.029]libzlink: video_focus_request_cb in
+video_focus_request: request back to HU HMI
+[14:54:00.091]libzlink: video_focus_request_cb out
+[14:54:02.409]libzlink_video_focus in, set hu_video_focus = 1
+[z-link][14:54:02.450]cmd_focus_handle: is_hu_video_focus_on = 1
+[z-link][14:54:02.450]session_state = 4, current_device = 5 airplay_is_running= 0
+[z-link][14:54:02.450]----------------cp_video_focus: is_hu_on = 1
+[z-link][14:54:02.451]----------------cp_video_focus: is_cp_on  to HU 
+[z-link][14:54:02.451]cmd_focus_handle: is_hu_video_focus_on = 0
+[z-link][14:54:02.451]session_state = 4, current_device = 5 airplay_is_running= 0
+[z-link][14:54:02.451]----------------cp_video_focus: is_hu_on = 0
+[z-link][14:54:02.454]----------------cp_video_focus: is_hu_on  to CP 
+[14:54:02.409]libzlink_video_focus out
+2026-04-01 02:54:02.482906 PM [AirPlay] Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:54:02.483]Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+2026-04-01 02:54:02.488329 PM [AirPlay] Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:54:02.488]Modes changed: screen accessory, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+a00f8008
+ERROR  : cedarc <VDecoderRegister:112>: Add '115:h264' fail! '115:h264' already register!
+ERROR  : cedarc <CedarPluginVDInit_h264:77>: register h264 decoder failure!!!
+ERROR  : cedarc <VDecoderRegister:112>: Add '116:h265' fail! '116:h265' already register!
+ERROR  : cedarc <CedarPluginVDInit_h265:86>: register h265 decoder failure!!!
+ERROR  : cedarc <VDecoderRegister:112>: Add '101:mjpeg' fail! '101:mjpeg' already register!
+ERROR  : cedarc <CedarPluginVDInit_mjpeg:85>: register mjpeg soft decoder failure!!!
+WARNING: cedarc <InitializeVideoDecoder:475>: warning: the nDecodeSmoothFrameBufferNum is 0
+WARNING: cedarc <InitializeVideoDecoder:481>: warning: the nDeInterlaceHoldingFrameBufferNum is 0
+[14:54:02.439]libzlink_video_focus in, set hu_video_focus = 0
+[14:54:02.439]libzlink_video_focus out
+[14:54:02.484]libzlink: cp_mode_change_cb
+[14:54:02.484]libzlink: cp_mode_change_cb: no callback
+[14:54:02.489]libzlink: cp_mode_change_cb
+2026-04-01 02:54:02.494709 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:54:02.494]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+2026-04-01 02:54:02.495702 PM [ScreenStream] Screen stream stopped
+[14:54:02.489]libzlink: cp_mode_change_cb: no callback
+2026-04-01 02:54:02.501383 PM [AirPlay] Teardown 
+2026-04-01 02:54:02.504824 PM [AirPlay] err 0/0x0 noErr RCV UDP len 4. 0004 306c
+2026-04-01 02:54:02.571409 PM [AirPlay] err 0/0x0 noErr RCV UDP len 4. 0004 306c
+2026-04-01 02:54:02.572428 PM [AirPlay] Setup
+CFDictionaryGetCString TextToSourceVersion: 6200802
+2026-04-01 02:54:02.586515 PM [ScreenStream] Screen stream started
+W0401 14:54:02.731544  1295 CedarXNativeRenderer.cpp:157] <CedarXNativeRenderer> bufWidth[736]!=display_width[720]
+I0401 14:54:02.731732  1295 hwdisplay.c:240] <hwd_layer_set_src> x: 0, y: 0, width: 0x2d0, height: 0x5a0
+I0401 14:54:02.731819  1295 hwdisplay.c:247] <hwd_layer_set_src> width: 0x2d000000000, height: 0x5a000000000
+I0401 14:54:02.731895  1295 hwdisplay.c:367] <hwd_layer_set_src> set fb.format 99 77, color_space 260 end, size0[736x1440], size1[368x720]
+W0401 14:54:03.326011  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:54:05.631412  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:54:05.761571 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:54:05.761]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[14:54:02.496]libzlink: cp_mode_change_cb
+[14:54:02.496]libzlink: cp_mode_change_cb: no callback
+WARNING: cedarc <H264MallocBuffer:1386>:  h264 scale down fbm buffer number need double check!  
+[carplay_display] vo size 720x1440
+[carplay_display] vo rendering start
+###### DOWN - screen touch point: x=1085, y=333
+###### MOVE - screen touch point: x=987, y=339 (dx=-98, dy=6, dist=98.2)
+###### MOVE - screen touch point: x=872, y=356 (dx=-115, dy=17, dist=116.2)
+###### UP - screen touch point: x=872, y=356
+###### DOWN - screen touch point: x=661, y=417
+###### UP - screen touch point: x=661, y=417
+###### DOWN - screen touch point: x=743, y=369
+###### MOVE - screen touch point: x=888, y=356 (dx=145, dy=-13, dist=145.6)
+###### MOVE - screen touch point: x=986, y=353 (dx=98, dy=-3, dist=98.0)
+###### MOVE - screen touch point: x=1142, y=340 (dx=156, dy=-13, dist=156.5)
+###### UP - screen touch point: x=1142, y=340
+###### DOWN - screen touch point: x=932, y=177
+###### UP - screen touch point: x=932, y=177
+[14:54:05.762]libzlink: cp_mode_change_cb
+W0401 14:54:06.131904  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:54:06.400350 PM [AirPlayReceiverSessionScreen] Late frame (457 ms, 1 total late frames): 2c08000000000000b4a9ba1e23510000 ... 866e973fe9e07e2f5404dd5c9544dc60
+2026-04-01 02:54:06.413980 PM [AirPlayReceiverSessionScreen] Late frame (437 ms, 2 total late frames): 3931000000000000d730432723510000 ... 6259994b15c48cdc0a2fa48adc9430a9
+2026-04-01 02:54:06.421719 PM [AirPlayReceiverSessionScreen] Late frame (412 ms, 3 total late frames): eb33000000000000acb8cb2f23510000 ... 5d9f47a71038c3208b02fbac1669d3d8
+2026-04-01 02:54:06.425875 PM [AirPlayReceiverSessionScreen] Late frame (382 ms, 4 total late frames): a6250000000000003541543823510000 ... 4ab20f98ecdb9638b6768e8a61a8bfe8
+2026-04-01 02:54:06.446801 PM [AirPlayReceiverSessionScreen] Late frame (370 ms, 5 total late frames): 414a00000000000057c8dc4023510000 ... b825569ac0744c4a9e550fb5fcbe71ba
+[14:54:05.762]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=1084, y=386
+###### MOVE - screen touch point: x=1045, y=385 (dx=-39, dy=-1, dist=39.0)
+###### MOVE - screen touch point: x=986, y=382 (dx=-59, dy=-3, dist=59.1)
+###### MOVE - screen touch point: x=927, y=382 (dx=-59, dy=0, dist=59.0)
+###### MOVE - screen touch point: x=844, y=388 (dx=-83, dy=6, dist=83.2)
+###### MOVE - screen touch point: x=787, y=389 (dx=-57, dy=1, dist=57.0)
+###### MOVE - screen touch point: x=769, y=391 (dx=-18, dy=2, dist=18.1)
+###### MOVE - screen touch point: x=763, y=391 (dx=-6, dy=0, dist=6.0)
+###### MOVE - screen touch point: x=758, y=392 (dx=-5, dy=1, dist=5.1)
+###### UP - screen touch point: x=758, y=392
+###### DOWN - screen touch point: x=750, y=393
+###### MOVE - screen touch point: x=748, y=393 (dx=-2, dy=0, dist=2.0)
+###### MOVE - screen touch point: x=746, y=393 (dx=-2, dy=0, dist=2.0)
+###### MOVE - screen touch point: x=745, y=392 (dx=-1, dy=-1, dist=1.4)
+745, y=390 (dx=0, dy=-2, dist=2.0)
+###### UP - screen touch point: x=745, y=390
+###### DOWN - screen touch point: x=770, y=367
+###### MOVE - screen touch point: x=809, y=339 (dx=39, dy=-28, dist=48.0)
+###### MOVE - screen touch point: x=892, y=281 (dx=83, dy=-58, dist=101.3)
+###### MOVE - screen touch point: x=918, y=267 (dx=26, dy=-14, dist=29.5)
+###### MOVE - screen touch point: x=945, y=259 (dx=27, dy=-8, dist=28.2)
+###### MOVE - screen touch point: x=968, y=246 (dx=23, dy=-13, dist=26.4)
+###### MOVE - screen touch point: x=999, y=233 (dx=31, dy=-13, dist=33.6)
+###### MOVE - screen touch point: x=1021, y=229 (dx=22, dy=-4, dist=22.4)
+###### MOVE - screen touch point: x=1036, y=227 (dx=15, dy=-2, dist=15.1)
+###### MOVE - screen touch point: x=1047, y=226 (dx=11, dy=-1, dist=11.0)
+###### MOVE - screen touch point: x=1080, y=235 (dx=33, dy=9, dist=34.2)
+###### MOVE - screen touch point: x=1083, y=238 (dx=3, dy=3, dist=4.2)
+###### MOVE - screen touch point: x=1088, y=242 (dx=5, dy=4, dist=6.4)
+1088, y=242
+###### DOWN - screen touch point: x=1090, y=245
+###### UP - screen touch point: x=1090, y=246
+###### DOWN - screen touch point: x=816, y=392
+###### MOVE - screen touch point: x=846, y=380 (dx=30, dy=-12, dist=32.3)
+###### MOVE - screen touch point: x=892, y=362 (dx=46, dy=-18, dist=49.4)
+###### MOVE - screen touch point: x=936, y=348 (dx=44, dy=-14, dist=46.2)
+###### MOVE - screen touch point: x=950, y=343 (dx=14, dy=-5, dist=14.9)
+###### MOVE - screen touch point: x=986, y=336 (dx=36, dy=-7, dist=36.7)
+###### MOVE - screen touch point: x=993, y=335 (dx=7, dy=-1, dist=7.1)
+###### MOVE - screen touch point: x=1018, y=329 (dx=25, dy=-6, dist=25.7)
+###### MOVE - screen touch point: x=1024, y=329 (dx=6, dy=0, dist=6.0)
+###### MOVE - screen touch point: x=1040, y=329 (dx=16, dy=0, dist=16.0)
+###### MOVE - screen touch point: x=1049, y=329 (dx=9, dy=0, dist=9.0)
+###### MOVE - screen touch point: x=1057, y=328 (dx=8, dy=-1, dist=8.1)
+###### MOVE - screen touch point: x=1064, y=329 (dx=7, dy=1, dist=7.1)
+1075, y=330 (dx=11, dy=1, dist=11.0)
+###### MOVE - screen touch point: x=1079, y=332 (dx=4, dy=2, dist=4.5)
+###### MOVE - screen touch point: x=1082, y=335 (dx=3, dy=3, dist=4.2)
+###### MOVE - screen touch point: x=1070, y=366 (dx=-12, dy=31, dist=33.2)
+###### MOVE - screen touch point: x=1044, y=420 (dx=-26, dy=54, dist=59.9)
+###### MOVE - screen touch point: x=1022, y=451 (dx=-22, dy=31, dist=38.0)
+###### MOVE - screen touch point: x=1014, y=461 (dx=-8, dy=10, dist=12.8)
+###### MOVE - screen touch point: x=997, y=480 (dx=-17, dy=19, dist=25.5)
+###### MOVE - screen touch point: x=986, y=490 (dx=-11, dy=10, dist=14.9)
+###### MOVE - screen touch point: x=978, y=497 (dx=-8, dy=7, dist=10.6)
+###### MOVE - screen touch point: x=965, y=510 (dx=-13, dy=13, dist=18.4)
+###### MOVE - screen touch point: x=964, y=511 (dx=-1, dy=1, dist=1.4)
+###### MOVE - screen touch point: x=960, y=513 (dx=-4, dy=2, dist=4.5)
+###### MOVE - screen touch point: x=952, y=513 (dx=-8, dy=0, dist=8.0)
+510 (dx=-15, dy=-3, dist=15.3)
+###### MOVE - screen touch point: x=899, y=500 (dx=-38, dy=-10, dist=39.3)
+###### MOVE - screen touch point: x=869, y=485 (dx=-30, dy=-15, dist=33.5)
+###### MOVE - screen touch point: x=832, y=466 (dx=-37, dy=-19, dist=41.6)
+###### MOVE - screen touch point: x=802, y=441 (dx=-30, dy=-25, dist=39.1)
+###### MOVE - screen touch point: x=760, y=400 (dx=-42, dy=-41, dist=58.7)
+###### MOVE - screen touch point: x=754, y=392 (dx=-6, dy=-8, dist=10.0)
+###### MOVE - screen touch point: x=750, y=386 (dx=-4, dy=-6, dist=7.2)
+###### MOVE - screen touch point: x=746, y=381 (dx=-4, dy=-5, dist=6.4)
+###### MOVE - screen touch point: x=746, y=375 (dx=0, dy=-6, dist=6.0)
+###### UP - screen touch point: x=746, y=375
+###### DOWN - screen touch point: x=796, y=306
+###### MOVE - screen touch point: x=810, y=290 (dx=14, dy=-16, dist=21.3)
+###### MOVE - screen touch point: x=867, y=238 (dx=57, dy=-52, dist=77.2)
+###### MOVE - screen touch point: x=887, y=227 (dx=20, dy=-11, dist=22.8)
+902, y=219 (dx=15, dy=-8, dist=17.0)
+###### MOVE - screen touch point: x=908, y=216 (dx=6, dy=-3, dist=6.7)
+###### MOVE - screen touch point: x=915, y=212 (dx=7, dy=-4, dist=8.1)
+###### MOVE - screen touch point: x=920, y=210 (dx=5, dy=-2, dist=5.4)
+###### MOVE - screen touch point: x=923, y=209 (dx=3, dy=-1, dist=3.2)
+###### MOVE - screen touch point: x=937, y=208 (dx=14, dy=-1, dist=14.0)
+###### MOVE - screen touch point: x=953, y=208 (dx=16, dy=0, dist=16.0)
+###### MOVE - screen touch point: x=961, y=207 (dx=8, dy=-1, dist=8.1)
+###### MOVE - screen touch point: x=972, y=208 (dx=11, dy=1, dist=11.0)
+###### MOVE - screen touch point: x=985, y=209 (dx=13, dy=1, dist=13.0)
+###### MOVE - screen touch point: x=992, y=210 (dx=7, dy=1, dist=7.1)
+###### MOVE - screen touch point: x=998, y=212 (dx=6, dy=2, dist=6.3)
+###### MOVE - screen touch point: x=1019, y=218 (dx=21, dy=6, dist=21.8)
+###### MOVE - screen touch point: x=1039, y=220 (dx=20, dy=2, dist=20.1)
+5, dist=24.5)
+###### MOVE - screen touch point: x=1075, y=226 (dx=12, dy=1, dist=12.0)
+###### MOVE - screen touch point: x=1085, y=227 (dx=10, dy=1, dist=10.0)
+###### MOVE - screen touch point: x=1090, y=226 (dx=5, dy=-1, dist=5.1)
+###### MOVE - screen touch point: x=1095, y=226 (dx=5, dy=0, dist=5.0)
+###### UP - screen touch point: x=1095, y=227
+###### DOWN - screen touch point: x=866, y=389
+###### MOVE - screen touch point: x=866, y=409 (dx=0, dy=20, dist=20.0)
+###### MOVE - screen touch point: x=868, y=458 (dx=2, dy=49, dist=49.0)
+###### MOVE - screen touch point: x=876, y=522 (dx=8, dy=64, dist=64.5)
+###### MOVE - screen touch point: x=882, y=555 (dx=6, dy=33, dist=33.5)
+###### MOVE - screen touch point: x=883, y=557 (dx=1, dy=2, dist=2.2)
+###### MOVE - screen touch point: x=887, y=563 (dx=4, dy=6, dist=7.2)
+###### MOVE - screen touch point: x=893, y=567 (dx=6, dy=4, dist=7.2)
+###### MOVE - screen touch point: x=905, y=571 (dx=12, dy=4, dist=12.6)
+, dist=13.0)
+###### MOVE - screen touch point: x=938, y=568 (dx=20, dy=-3, dist=20.2)
+###### MOVE - screen touch point: x=953, y=561 (dx=15, dy=-7, dist=16.6)
+###### MOVE - screen touch point: x=965, y=557 (dx=12, dy=-4, dist=12.6)
+###### MOVE - screen touch point: x=982, y=551 (dx=17, dy=-6, dist=18.0)
+###### MOVE - screen touch point: x=1014, y=528 (dx=32, dy=-23, dist=39.4)
+###### MOVE - screen touch point: x=1066, y=478 (dx=52, dy=-50, dist=72.1)
+###### MOVE - screen touch point: x=1082, y=465 (dx=16, dy=-13, dist=20.6)
+###### MOVE - screen touch point: x=1132, y=407 (dx=50, dy=-58, dist=76.6)
+###### MOVE - screen touch point: x=1138, y=397 (dx=6, dy=-10, dist=11.7)
+###### MOVE - screen touch point: x=1152, y=364 (dx=14, dy=-33, dist=35.8)
+###### MOVE - screen touch point: x=1157, y=336 (dx=5, dy=-28, dist=28.4)
+###### MOVE - screen touch point: x=1156, y=324 (dx=-1, dy=-12, dist=12.0)
+###### MOVE - screen touch point: x=1149, y=302 (dx=-7, dy=-22, dist=23.1)
+ (dx=-4, dy=-10, dist=10.8)
+###### MOVE - screen touch point: x=1106, y=259 (dx=-39, dy=-33, dist=51.1)
+###### MOVE - screen touch point: x=1082, y=246 (dx=-24, dy=-13, dist=27.3)
+###### MOVE - screen touch point: x=1061, y=240 (dx=-21, dy=-6, dist=21.8)
+###### MOVE - screen touch point: x=1035, y=232 (dx=-26, dy=-8, dist=27.2)
+###### MOVE - screen touch point: x=1005, y=230 (dx=-30, dy=-2, dist=30.1)
+###### MOVE - screen touch point: x=992, y=229 (dx=-13, dy=-1, dist=13.0)
+###### MOVE - screen touch point: x=933, y=232 (dx=-59, dy=3, dist=59.1)
+###### MOVE - screen touch point: x=850, y=267 (dx=-83, dy=35, dist=90.1)
+###### MOVE - screen touch point: x=810, y=293 (dx=-40, dy=26, dist=47.7)
+###### MOVE - screen touch point: x=783, y=323 (dx=-27, dy=30, dist=40.4)
+###### MOVE - screen touch point: x=760, y=346 (dx=-23, dy=23, dist=32.5)
+###### UP - screen touch point: x=760, y=346
+###### DOWN - screen touch point: x=725, y=408
+###### MOVE - screen touch point: x=718, y=422 (dx=-7, dy=14, dist=15.7)
+712, y=441 (dx=-6, dy=19, dist=19.9)
+###### MOVE - screen touch point: x=711, y=458 (dx=-1, dy=17, dist=17.0)
+###### MOVE - screen touch point: x=712, y=467 (dx=1, dy=9, dist=9.1)
+###### MOVE - screen touch point: x=711, y=477 (dx=-1, dy=10, dist=10.0)
+###### MOVE - screen touch point: x=711, y=487 (dx=0, dy=10, dist=10.0)
+###### MOVE - screen touch point: x=720, y=507 (dx=9, dy=20, dist=21.9)
+###### MOVE - screen touch point: x=728, y=520 (dx=8, dy=13, dist=15.3)
+###### MOVE - screen touch point: x=752, y=533 (dx=24, dy=13, dist=27.3)
+###### MOVE - screen touch point: x=768, y=537 (dx=16, dy=4, dist=16.5)
+###### MOVE - screen touch point: x=800, y=545 (dx=32, dy=8, dist=33.0)
+###### MOVE - screen touch point: x=809, y=546 (dx=9, dy=1, dist=9.1)
+###### MOVE - screen touch point: x=818, y=545 (dx=9, dy=-1, dist=9.1)
+###### UP - screen touch point: x=818, y=545
+###### DOWN - screen touch point: x=834, y=547
+###### MOVE - screen touch point: x=861, y=543 (dx=27, dy=-4, dist=27.3)
+915, y=530 (dx=54, dy=-13, dist=55.5)
+###### MOVE - screen touch point: x=990, y=486 (dx=75, dy=-44, dist=87.0)
+###### MOVE - screen touch point: x=1048, y=436 (dx=58, dy=-50, dist=76.6)
+###### MOVE - screen touch point: x=1077, y=402 (dx=29, dy=-34, dist=44.7)
+###### MOVE - screen touch point: x=1103, y=341 (dx=26, dy=-61, dist=66.3)
+###### MOVE - screen touch point: x=1104, y=310 (dx=1, dy=-31, dist=31.0)
+###### MOVE - screen touch point: x=1094, y=274 (dx=-10, dy=-36, dist=37.4)
+###### MOVE - screen touch point: x=1068, y=256 (dx=-26, dy=-18, dist=31.6)
+###### MOVE - screen touch point: x=1025, y=239 (dx=-43, dy=-17, dist=46.2)
+###### MOVE - screen touch point: x=977, y=235 (dx=-48, dy=-4, dist=48.2)
+###### MOVE - screen touch point: x=945, y=240 (dx=-32, dy=5, dist=32.4)
+###### MOVE - screen touch point: x=900, y=256 (dx=-45, dy=16, dist=47.8)
+###### MOVE - screen touch point: x=810, y=315 (dx=-90, dy=59, dist=107.6)
+###### UP - screen touch point: x=810, y=315
+
+###### MOVE - screen touch point: x=715, y=450 (dx=-11, dy=29, dist=31.0)
+###### MOVE - screen touch point: x=713, y=475 (dx=-2, dy=25, dist=25.1)
+###### MOVE - screen touch point: x=719, y=510 (dx=6, dy=35, dist=35.5)
+###### MOVE - screen touch point: x=726, y=535 (dx=7, dy=25, dist=26.0)
+###### MOVE - screen touch point: x=739, y=566 (dx=13, dy=31, dist=33.6)
+###### MOVE - screen touch point: x=790, y=610 (dx=51, dy=44, dist=67.4)
+###### MOVE - screen touch point: x=820, y=626 (dx=30, dy=16, dist=34.0)
+###### MOVE - screen touch point: x=850, y=638 (dx=30, dy=12, dist=32.3)
+###### MOVE - screen touch point: x=861, y=642 (dx=11, dy=4, dist=11.7)
+###### MOVE - screen touch point: x=887, y=644 (dx=26, dy=2, dist=26.1)
+###### MOVE - screen touch point: x=902, y=642 (dx=15, dy=-2, dist=15.1)
+###### MOVE - screen touch point: x=923, y=638 (dx=21, dy=-4, dist=21.4)
+###### MOVE - screen touch point: x=934, y=635 (dx=11, dy=-3, dist=11.4)
+###### MOVE - screen touch point: x=939, y=634 (dx=5, dy=-1, dist=5.1)
+945, y=633 (dx=6, dy=-1, dist=6.1)
+###### MOVE - screen touch point: x=947, y=633 (dx=2, dy=0, dist=2.0)
+###### UP - screen touch point: x=948, y=633
+###### DOWN - screen touch point: x=961, y=341
+###### MOVE - screen touch point: x=952, y=345 (dx=-9, dy=4, dist=9.8)
+###### MOVE - screen touch point: x=934, y=353 (dx=-18, dy=8, dist=19.7)
+###### MOVE - screen touch point: x=864, y=384 (dx=-70, dy=31, dist=76.6)
+###### MOVE - screen touch point: x=845, y=396 (dx=-19, dy=12, dist=22.5)
+###### MOVE - screen touch point: x=789, y=436 (dx=-56, dy=40, dist=68.8)
+###### MOVE - screen touch point: x=760, y=457 (dx=-29, dy=21, dist=35.8)
+###### MOVE - screen touch point: x=738, y=474 (dx=-22, dy=17, dist=27.8)
+###### UP - screen touch point: x=738, y=474
+###### DOWN - screen touch point: x=710, y=500
+###### MOVE - screen touch point: x=700, y=516 (dx=-10, dy=16, dist=18.9)
+###### MOVE - screen touch point: x=697, y=522 (dx=-3, dy=6, dist=6.7)
+###### MOVE - screen touch point: x=697, y=525 (dx=0, dy=3, dist=3.0)
+697, y=528 (dx=0, dy=3, dist=3.0)
+###### MOVE - screen touch point: x=698, y=533 (dx=1, dy=5, dist=5.1)
+###### MOVE - screen touch point: x=701, y=538 (dx=3, dy=5, dist=5.8)
+###### MOVE - screen touch point: x=704, y=543 (dx=3, dy=5, dist=5.8)
+###### MOVE - screen touch point: x=712, y=549 (dx=8, dy=6, dist=10.0)
+###### MOVE - screen touch point: x=754, y=571 (dx=42, dy=22, dist=47.4)
+###### MOVE - screen touch point: x=773, y=574 (dx=19, dy=3, dist=19.2)
+###### MOVE - screen touch point: x=803, y=577 (dx=30, dy=3, dist=30.1)
+###### MOVE - screen touch point: x=816, y=577 (dx=13, dy=0, dist=13.0)
+###### MOVE - screen touch point: x=828, y=577 (dx=12, dy=0, dist=12.0)
+###### MOVE - screen touch point: x=841, y=577 (dx=13, dy=0, dist=13.0)
+###### MOVE - screen touch point: x=853, y=577 (dx=12, dy=0, dist=12.0)
+###### MOVE - screen touch point: x=856, y=577 (dx=3, dy=0, dist=3.0)
+###### MOVE - screen touch point: x=858, y=577 (dx=2, dy=0, dist=2.0)
+3.6)
+###### MOVE - screen touch point: x=831, y=566 (dx=-24, dy=-9, dist=25.6)
+###### MOVE - screen touch point: x=818, y=560 (dx=-13, dy=-6, dist=14.3)
+###### MOVE - screen touch point: x=787, y=547 (dx=-31, dy=-13, dist=33.6)
+###### MOVE - screen touch point: x=752, y=534 (dx=-35, dy=-13, dist=37.3)
+###### MOVE - screen touch point: x=719, y=502 (dx=-33, dy=-32, dist=46.0)
+###### MOVE - screen touch point: x=711, y=490 (dx=-8, dy=-12, dist=14.4)
+###### MOVE - screen touch point: x=706, y=480 (dx=-5, dy=-10, dist=11.2)
+###### MOVE - screen touch point: x=703, y=467 (dx=-3, dy=-13, dist=13.3)
+###### MOVE - screen touch point: x=703, y=445 (dx=0, dy=-22, dist=22.0)
+###### MOVE - screen touch point: x=704, y=434 (dx=1, dy=-11, dist=11.0)
+###### MOVE - screen touch point: x=722, y=408 (dx=18, dy=-26, dist=31.6)
+###### MOVE - screen touch point: x=743, y=377 (dx=21, dy=-31, dist=37.4)
+###### MOVE - screen touch point: x=767, y=355 (dx=24, dy=-22, dist=32.6)
+-24, dist=44.9)
+###### MOVE - screen touch point: x=826, y=318 (dx=21, dy=-13, dist=24.7)
+###### MOVE - screen touch point: x=855, y=310 (dx=29, dy=-8, dist=30.1)
+###### MOVE - screen touch point: x=888, y=303 (dx=33, dy=-7, dist=33.7)
+###### MOVE - screen touch point: x=933, y=302 (dx=45, dy=-1, dist=45.0)
+###### MOVE - screen touch point: x=965, y=309 (dx=32, dy=7, dist=32.8)
+###### MOVE - screen touch point: x=997, y=321 (dx=32, dy=12, dist=34.2)
+###### MOVE - screen touch point: x=1009, y=335 (dx=12, dy=14, dist=18.4)
+###### MOVE - screen touch point: x=1020, y=349 (dx=11, dy=14, dist=17.8)
+###### MOVE - screen touch point: x=1028, y=364 (dx=8, dy=15, dist=17.0)
+###### MOVE - screen touch point: x=1033, y=381 (dx=5, dy=17, dist=17.7)
+###### MOVE - screen touch point: x=1037, y=404 (dx=4, dy=23, dist=23.3)
+###### UP - screen touch point: x=1037, y=404
+###### DOWN - screen touch point: x=1023, y=450
+###### MOVE - screen touch point: x=1021, y=457 (dx=-2, dy=7, dist=7.3)
+, y=485 (dx=-8, dy=28, dist=29.1)
+###### MOVE - screen touch point: x=1005, y=499 (dx=-8, dy=14, dist=16.1)
+###### MOVE - screen touch point: x=995, y=509 (dx=-10, dy=10, dist=14.1)
+###### MOVE - screen touch point: x=984, y=521 (dx=-11, dy=12, dist=16.3)
+###### MOVE - screen touch point: x=975, y=530 (dx=-9, dy=9, dist=12.7)
+###### MOVE - screen touch point: x=963, y=545 (dx=-12, dy=15, dist=19.2)
+###### MOVE - screen touch point: x=958, y=550 (dx=-5, dy=5, dist=7.1)
+###### MOVE - screen touch point: x=946, y=562 (dx=-12, dy=12, dist=17.0)
+###### UP - screen touch point: x=946, y=562
+###### DOWN - screen touch point: x=937, y=569
+###### UP - screen touch point: x=937, y=569
+###### DOWN - screen touch point: x=1071, y=329
+###### MOVE - screen touch point: x=1061, y=330 (dx=-10, dy=1, dist=10.0)
+###### MOVE - screen touch point: x=984, y=349 (dx=-77, dy=19, dist=79.3)
+###### MOVE - screen touch point: x=945, y=361 (dx=-39, dy=12, dist=40.8)
+5)
+###### MOVE - screen touch point: x=864, y=379 (dx=-34, dy=6, dist=34.5)
+###### MOVE - screen touch point: x=836, y=385 (dx=-28, dy=6, dist=28.6)
+###### MOVE - screen touch point: x=813, y=390 (dx=-23, dy=5, dist=23.5)
+###### MOVE - screen touch point: x=795, y=394 (dx=-18, dy=4, dist=18.4)
+###### MOVE - screen touch point: x=779, y=396 (dx=-16, dy=2, dist=16.1)
+###### MOVE - screen touch point: x=764, y=401 (dx=-15, dy=5, dist=15.8)
+###### MOVE - screen touch point: x=757, y=406 (dx=-7, dy=5, dist=8.6)
+###### MOVE - screen touch point: x=752, y=411 (dx=-5, dy=5, dist=7.1)
+###### MOVE - screen touch point: x=749, y=414 (dx=-3, dy=3, dist=4.2)
+###### MOVE - screen touch point: x=745, y=420 (dx=-4, dy=6, dist=7.2)
+###### MOVE - screen touch point: x=743, y=423 (dx=-2, dy=3, dist=3.6)
+###### MOVE - screen touch point: x=736, y=431 (dx=-7, dy=8, dist=10.6)
+###### MOVE - screen touch point: x=734, y=434 (dx=-2, dy=3, dist=3.6)
+###### MOVE - screen touch point: x=733, y=436 (dx=-1, dy=2, dist=2.2)
+2026-04-01 02:54:21.264458 PM [AirPlayReceiverSessionScreen] Late frame (555 ms, 11 total late frames): 03f600000000000097b7fde231510000 ... b5f08f91579fa059aa6772a3bce4844b
+2026-04-01 02:54:21.268040 PM [AirPlayReceiverSessionScreen] Late frame (526 ms, 12 total late frames): 7c01000000000000204086eb31510000 ... 50aa0a347b092c0aed48a812c2b004dd
+2026-04-01 02:54:21.268815 PM [AirPlayReceiverSessionScreen] Late frame (493 ms, 13 total late frames): 9b0100000000000043c70ef431510000 ... 45e75265bcdfc10ffdf333c46018bc5f
+2026-04-01 02:54:21.269502 PM [AirPlayReceiverSessionScreen] Late frame (461 ms, 14 total late frames): 9f01000000000000184f97fc31510000 ... 5f9ec4d81648b9fd2675d6b9954c21b2
+2026-04-01 02:54:21.270643 PM [AirPlayReceiverSessionScreen] Late frame (428 ms, 15 total late frames): 2d02000000000000a1d71f0532510000 ... 7d73e4f82dfd3f68e8955ed24237d8af
+732, y=437 (dx=-1, dy=1, dist=1.4)
+###### MOVE - screen touch point: x=734, y=436 (dx=2, dy=-1, dist=2.2)
+###### UP - screen touch point: x=734, y=436
+###### DOWN - screen touch point: x=963, y=328
+###### MOVE - screen touch point: x=950, y=330 (dx=-13, dy=2, dist=13.2)
+###### MOVE - screen touch point: x=933, y=333 (dx=-17, dy=3, dist=17.3)
+###### MOVE - screen touch point: x=880, y=349 (dx=-53, dy=16, dist=55.4)
+###### MOVE - screen touch point: x=822, y=377 (dx=-58, dy=28, dist=64.4)
+###### MOVE - screen touch point: x=802, y=384 (dx=-20, dy=7, dist=21.2)
+###### MOVE - screen touch point: x=783, y=390 (dx=-19, dy=6, dist=19.9)
+###### MOVE - screen touch point: x=771, y=393 (dx=-12, dy=3, dist=12.4)
+###### MOVE - screen touch point: x=756, y=398 (dx=-15, dy=5, dist=15.8)
+###### MOVE - screen touch point: x=751, y=400 (dx=-5, dy=2, dist=5.4)
+###### MOVE - screen touch point: x=748, y=402 (dx=-3, dy=2, dist=3.6)
+###### MOVE - screen touch point: x=747, y=403 (dx=-1, dy=1, dist=1.4)
+2026-04-01 02:54:36.655782 PM [AirPlayReceiverSessionScreen] Late frame (546 ms, 41 total late frames): a01300000000000008db624941510000 ... 7f137e4f1a1bbebcd9699cc688109be0
+2026-04-01 02:54:36.657679 PM [AirPlayReceiverSessionScreen] Late frame (514 ms, 42 total late frames): 49160000000000009063eb5141510000 ... bd045a691409b9d399704a5a5af593fb
+2026-04-01 02:54:36.659798 PM [AirPlayReceiverSessionScreen] Late frame (483 ms, 43 total late frames): e313000000000000b3ea735a41510000 ... 7dbf420f5ba8eea678cf137a4510a3b9
+2026-04-01 02:54:36.661988 PM [AirPlayReceiverSessionScreen] Late frame (452 ms, 44 total late frames): 1f160000000000008872fc6241510000 ... b8b78acfab6807d71923b9357e060ed5
+2026-04-01 02:54:36.667817 PM [AirPlayReceiverSessionScreen] Late frame (424 ms, 45 total late frames): df1300000000000011fb846b41510000 ... 709f1e79ebc5a2fa36fed7eac61bfabb
+744, y=405 (dx=-3, dy=2, dist=3.6)
+###### MOVE - screen touch point: x=743, y=407 (dx=-1, dy=2, dist=2.2)
+###### MOVE - screen touch point: x=743, y=409 (dx=0, dy=2, dist=2.0)
+###### MOVE - screen touch point: x=743, y=411 (dx=0, dy=2, dist=2.0)
+###### UP - screen touch point: x=743, y=411
+###### DOWN - screen touch point: x=685, y=465
+###### MOVE - screen touch point: x=714, y=364 (dx=29, dy=-101, dist=105.1)
+###### MOVE - screen touch point: x=764, y=306 (dx=50, dy=-58, dist=76.6)
+###### MOVE - screen touch point: x=804, y=274 (dx=40, dy=-32, dist=51.2)
+###### MOVE - screen touch point: x=850, y=244 (dx=46, dy=-30, dist=54.9)
+###### MOVE - screen touch point: x=874, y=230 (dx=24, dy=-14, dist=27.8)
+###### MOVE - screen touch point: x=896, y=224 (dx=22, dy=-6, dist=22.8)
+###### MOVE - screen touch point: x=905, y=221 (dx=9, dy=-3, dist=9.5)
+###### MOVE - screen touch point: x=914, y=217 (dx=9, dy=-4, dist=9.8)
+###### MOVE - screen touch point: x=934, y=210 (dx=20, dy=-7, dist=21.2)
+941, y=208 (dx=7, dy=-2, dist=7.3)
+###### MOVE - screen touch point: x=945, y=208 (dx=4, dy=0, dist=4.0)
+###### MOVE - screen touch point: x=949, y=207 (dx=4, dy=-1, dist=4.1)
+###### MOVE - screen touch point: x=952, y=207 (dx=3, dy=0, dist=3.0)
+###### UP - screen touch point: x=952, y=207
+###### DOWN - screen touch point: x=653, y=404
+###### MOVE - screen touch point: x=665, y=393 (dx=12, dy=-11, dist=16.3)
+###### MOVE - screen touch point: x=694, y=359 (dx=29, dy=-34, dist=44.7)
+###### MOVE - screen touch point: x=722, y=327 (dx=28, dy=-32, dist=42.5)
+###### MOVE - screen touch point: x=766, y=284 (dx=44, dy=-43, dist=61.5)
+###### MOVE - screen touch point: x=799, y=256 (dx=33, dy=-28, dist=43.3)
+###### MOVE - screen touch point: x=829, y=230 (dx=30, dy=-26, dist=39.7)
+###### MOVE - screen touch point: x=840, y=225 (dx=11, dy=-5, dist=12.1)
+###### MOVE - screen touch point: x=858, y=217 (dx=18, dy=-8, dist=19.7)
+###### MOVE - screen touch point: x=865, y=216 (dx=7, dy=-1, dist=7.1)
+872, y=217 (dx=7, dy=1, dist=7.1)
+###### MOVE - screen touch point: x=878, y=221 (dx=6, dy=4, dist=7.2)
+###### MOVE - screen touch point: x=884, y=228 (dx=6, dy=7, dist=9.2)
+###### MOVE - screen touch point: x=885, y=235 (dx=1, dy=7, dist=7.1)
+###### MOVE - screen touch point: x=883, y=243 (dx=-2, dy=8, dist=8.2)
+###### MOVE - screen touch point: x=880, y=258 (dx=-3, dy=15, dist=15.3)
+###### MOVE - screen touch point: x=864, y=296 (dx=-16, dy=38, dist=41.2)
+###### MOVE - screen touch point: x=850, y=320 (dx=-14, dy=24, dist=27.8)
+###### MOVE - screen touch point: x=825, y=353 (dx=-25, dy=33, dist=41.4)
+###### MOVE - screen touch point: x=816, y=362 (dx=-9, dy=9, dist=12.7)
+###### MOVE - screen touch point: x=800, y=377 (dx=-16, dy=15, dist=21.9)
+###### MOVE - screen touch point: x=790, y=386 (dx=-10, dy=9, dist=13.5)
+###### MOVE - screen touch point: x=785, y=391 (dx=-5, dy=5, dist=7.1)
+###### MOVE - screen touch point: x=759, y=409 (dx=-26, dy=18, dist=31.6)
+2026-04-01 02:54:51.541309 PM [AirPlayReceiverSessionScreen] Late frame (531 ms, 67 total late frames): 0111000000000000f408c82f50510000 ... 02d579bc480b9f73b6d1e0022d775ed2
+2026-04-01 02:54:51.543369 PM [AirPlayReceiverSessionScreen] Late frame (499 ms, 68 total late frames): 96130000000000007d91503850510000 ... a6e85321b00956555f6e4bd22bcbb759
+2026-04-01 02:54:51.545507 PM [AirPlayReceiverSessionScreen] Late frame (468 ms, 69 total late frames): 4311000000000000a018d94050510000 ... 248ad6ad9ad2c6d9fef505864af9ec9c
+2026-04-01 02:54:51.548063 PM [AirPlayReceiverSessionScreen] Late frame (437 ms, 70 total late frames): 091100000000000075a0614950510000 ... 39b9a81d39c30bdab5285178b4fe7b29
+2026-04-01 02:54:51.548620 PM [AirPlayReceiverSessionScreen] Late frame (405 ms, 71 total late frames): b313000000000000fe28ea5150510000 ... 9429c6b185468c9773f7efdfd1c15765
+2026-04-01 02:55:00.002706 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:00.003]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+W0401 14:55:02.392560  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:02.893025  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:04.015646  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+-7, dy=4, dist=8.1)
+###### MOVE - screen touch point: x=746, y=418 (dx=-6, dy=5, dist=7.8)
+###### UP - screen touch point: x=746, y=418
+###### DOWN - screen touch point: x=415, y=303
+###### UP - screen touch point: x=415, y=303
+###### DOWN - screen touch point: x=72, y=664
+###### UP - screen touch point: x=72, y=664
+[14:55:00.003]libzlink: cp_mode_change_cb
+[14:55:00.003]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=787, y=346
+###### UP - screen touch point: x=787, y=346
+###### DOWN - screen touch point: x=641, y=349
+###### MOVE - screen touch point: x=531, y=338 (dx=-110, dy=-11, dist=110.5)
+###### MOVE - screen touch point: x=411, y=331 (dx=-120, dy=-7, dist=120.2)
+###### UP - screen touch point: x=366, y=333
+###### DOWN - screen touch point: x=691, y=344
+###### MOVE - screen touch point: x=756, y=339 (dx=65, dy=-5, dist=65.2)
+###### MOVE - screen touch point: x=853, y=335 (dx=97, dy=-4, dist=97.1)
+###### MOVE - screen touch point: x=953, y=323 (dx=100, dy=-12, dist=100.7)
+W0401 14:55:05.496798  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:55:05.908533 PM [AirPlayReceiverSessionScreen] Late frame (185 ms, 90 total late frames): e84b010000000000e7314ae65e510000 ... 94d9fda9f1b4a0e57e2453c2644a66df
+2026-04-01 02:55:05.913359 PM [AirPlayReceiverSessionScreen] Late frame (156 ms, 91 total late frames): 43000100000000000ab9d2ee5e510000 ... 4bfb93a69e0ed4185ceac96bac6fd818
+W0401 14:55:06.461548  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:55:06.538094 PM [AirPlayReceiverSessionScreen] Late frame (714 ms, 92 total late frames): 8af200000000000068c9e3ff5e510000 ... 4ac3cc7d0730b2bca75d957de539c80a
+2026-04-01 02:55:06.550383 PM [AirPlayReceiverSessionScreen] Late frame (693 ms, 93 total late frames): 3f760000000000008b506c085f510000 ... 410b75c5aa7c9b2916ac7c47abc8d903
+2026-04-01 02:55:06.567436 PM [AirPlayReceiverSessionScreen] Late frame (677 ms, 94 total late frames): 74bc00000000000060d8f4105f510000 ... f18c642e7eb4a6001022ff5fc072b4e5
+W0401 14:55:07.126801  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:08.658545  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+1130, y=301 (dx=177, dy=-22, dist=178.4)
+###### UP - screen touch point: x=1130, y=301
+###### DOWN - screen touch point: x=1154, y=316
+###### MOVE - screen touch point: x=1142, y=314 (dx=-12, dy=-2, dist=12.2)
+###### MOVE - screen touch point: x=1080, y=318 (dx=-62, dy=4, dist=62.1)
+###### MOVE - screen touch point: x=982, y=332 (dx=-98, dy=14, dist=99.0)
+###### MOVE - screen touch point: x=931, y=339 (dx=-51, dy=7, dist=51.5)
+###### MOVE - screen touch point: x=813, y=353 (dx=-118, dy=14, dist=118.8)
+###### UP - screen touch point: x=773, y=359
+###### DOWN - screen touch point: x=789, y=347
+###### MOVE - screen touch point: x=805, y=348 (dx=16, dy=1, dist=16.0)
+###### MOVE - screen touch point: x=898, y=351 (dx=93, dy=3, dist=93.0)
+###### MOVE - screen touch point: x=904, y=350 (dx=6, dy=-1, dist=6.1)
+###### MOVE - screen touch point: x=1025, y=342 (dx=121, dy=-8, dist=121.3)
+###### UP - screen touch point: x=1025, y=342
+2026-04-01 02:55:08.962736 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:08.962]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+###### DOWN - screen touch point: x=1217, y=155
+155
+[14:55:08.963]libzlink: cp_mode_change_cb
+[14:55:08.963]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=1016, y=533
+###### MOVE - screen touch point: x=1023, y=418 (dx=7, dy=-115, dist=115.2)
+###### UP - screen touch point: x=1023, y=418
+###### DOWN - screen touch point: x=982, y=545
+###### MOVE - screen touch point: x=1005, y=451 (dx=23, dy=-94, dist=96.8)
+###### MOVE - screen touch point: x=1032, y=358 (dx=27, dy=-93, dist=96.8)
+###### MOVE - screen touch point: x=1046, y=297 (dx=14, dy=-61, dist=62.6)
+###### UP - screen touch point: x=1055, y=265
+###### DOWN - screen touch point: x=1024, y=278
+###### MOVE - screen touch point: x=1024, y=291 (dx=0, dy=13, dist=13.0)
+###### MOVE - screen touch point: x=1023, y=333 (dx=-1, dy=42, dist=42.0)
+###### MOVE - screen touch point: x=1021, y=383 (dx=-2, dy=50, dist=50.0)
+###### MOVE - screen touch point: x=1019, y=430 (dx=-2, dy=47, dist=47.0)
+###### MOVE - screen touch point: x=1018, y=496 (dx=-1, dy=66, dist=66.0)
+W0401 14:55:15.237078  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:15.737386  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+1025, y=628 (dx=7, dy=132, dist=132.2)
+###### UP - screen touch point: x=1025, y=628
+###### DOWN - screen touch point: x=961, y=575
+###### MOVE - screen touch point: x=966, y=526 (dx=5, dy=-49, dist=49.3)
+###### MOVE - screen touch point: x=967, y=472 (dx=1, dy=-54, dist=54.0)
+###### MOVE - screen touch point: x=969, y=444 (dx=2, dy=-28, dist=28.1)
+###### MOVE - screen touch point: x=1001, y=328 (dx=32, dy=-116, dist=120.3)
+###### MOVE - screen touch point: x=1047, y=227 (dx=46, dy=-101, dist=111.0)
+###### UP - screen touch point: x=1047, y=227
+###### DOWN - screen touch point: x=1022, y=311
+###### MOVE - screen touch point: x=1020, y=345 (dx=-2, dy=34, dist=34.1)
+###### MOVE - screen touch point: x=1020, y=393 (dx=0, dy=48, dist=48.0)
+###### MOVE - screen touch point: x=1020, y=438 (dx=0, dy=45, dist=45.0)
+###### UP - screen touch point: x=1020, y=438
+###### DOWN - screen touch point: x=1019, y=535
+###### UP - screen touch point: x=1019, y=535
+###### DOWN - screen touch point: x=451, y=379
+W0401 14:55:17.932137  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+472, y=453 (dx=21, dy=74, dist=76.9)
+###### MOVE - screen touch point: x=477, y=510 (dx=5, dy=57, dist=57.2)
+###### MOVE - screen touch point: x=480, y=572 (dx=3, dy=62, dist=62.1)
+###### MOVE - screen touch point: x=481, y=636 (dx=1, dy=64, dist=64.0)
+###### UP - screen touch point: x=481, y=636
+###### DOWN - screen touch point: x=432, y=531
+###### MOVE - screen touch point: x=441, y=435 (dx=9, dy=-96, dist=96.4)
+###### MOVE - screen touch point: x=435, y=362 (dx=-6, dy=-73, dist=73.2)
+###### MOVE - screen touch point: x=443, y=362 (dx=8, dy=0, dist=8.0)
+###### MOVE - screen touch point: x=431, y=243 (dx=-12, dy=-119, dist=119.6)
+###### UP - screen touch point: x=407, y=107
+###### DOWN - screen touch point: x=463, y=510
+###### MOVE - screen touch point: x=458, y=401 (dx=-5, dy=-109, dist=109.1)
+###### UP - screen touch point: x=458, y=401
+###### DOWN - screen touch point: x=433, y=263
+###### MOVE - screen touch point: x=428, y=242 (dx=-5, dy=-21, dist=21.6)
+W0401 14:55:19.880661  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:20.380963  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:20.881243  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:21.381531  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:21.881811  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+W0401 14:55:22.382107  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:55:22.526077 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:22.526]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+W0401 14:55:22.882371  1293 VideoDec_Component.c:4528] <ComponentThread> fatal error! wait vbs data timeout!
+2026-04-01 02:55:23.156536 PM [AirPlayReceiverSessionScreen] Late frame (471 ms, 103 total late frames): 5711020000000000adbc64dc6f510000 ... 2fa2edfc3f873cb36eb619081847fec3
+2026-04-01 02:55:23.170631 PM [AirPlayReceiverSessionScreen] Late frame (385 ms, 104 total late frames): fe3c0000000000002e54fef56f510000 ... 492df1cefa7a6fc025779b3def00d123
+2026-04-01 02:55:23.511344 PM [AirPlayReceiverSessionScreen] Late frame (692 ms, 105 total late frames): 125201000000000050db86fe6f510000 ... e3a173fa6075ac91835e72f3abf22039
+2026-04-01 02:55:23.533482 PM [AirPlayReceiverSessionScreen] Late frame (648 ms, 106 total late frames): 1af5000000000000afeb970f70510000 ... 0335f0f9e1095b3c3f7e80e07985ad9d
+2026-04-01 02:55:23.547222 PM [AirPlayReceiverSessionScreen] Late frame (328 ms, 107 total late frames): 24bb000000000000063aed6470510000 ... 348c3dfdaac46f391c675e2122bab78d
+2026-04-01 02:55:23.648731 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:23.648]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+2026-04-01 02:55:25.517890 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:25.518]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+28, dy=-94, dist=98.1)
+###### UP - screen touch point: x=400, y=148
+###### DOWN - screen touch point: x=62, y=645
+###### UP - screen touch point: x=62, y=645
+[14:55:22.526]libzlink: cp_mode_change_cb
+[14:55:22.526]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=72, y=678
+###### UP - screen touch point: x=72, y=678
+[14:55:23.649]libzlink: cp_mode_change_cb
+[14:55:23.649]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=457, y=354
+###### UP - screen touch point: x=457, y=354
+[14:55:25.533]libzlink: cp_mode_change_cb
+[14:55:25.534]libzlink: cp_mode_change_cb: no callback
+###### DOWN - screen touch point: x=457, y=354
+###### UP - screen touch point: x=457, y=354
+###### DOWN - screen touch point: x=858, y=336
+###### MOVE - screen touch point: x=849, y=333 (dx=-9, dy=-3, dist=9.5)
+###### MOVE - screen touch point: x=823, y=330 (dx=-26, dy=-3, dist=26.2)
+###### MOVE - screen touch point: x=787, y=331 (dx=-36, dy=1, dist=36.0)
+751, y=332 (dx=-36, dy=1, dist=36.0)
+###### MOVE - screen touch point: x=699, y=334 (dx=-52, dy=2, dist=52.0)
+###### MOVE - screen touch point: x=674, y=336 (dx=-25, dy=2, dist=25.1)
+###### MOVE - screen touch point: x=634, y=338 (dx=-40, dy=2, dist=40.0)
+###### MOVE - screen touch point: x=614, y=339 (dx=-20, dy=1, dist=20.0)
+###### MOVE - screen touch point: x=588, y=341 (dx=-26, dy=2, dist=26.1)
+###### MOVE - screen touch point: x=565, y=345 (dx=-23, dy=4, dist=23.3)
+###### MOVE - screen touch point: x=544, y=347 (dx=-21, dy=2, dist=21.1)
+###### MOVE - screen touch point: x=535, y=347 (dx=-9, dy=0, dist=9.0)
+###### MOVE - screen touch point: x=529, y=347 (dx=-6, dy=0, dist=6.0)
+###### MOVE - screen touch point: x=526, y=348 (dx=-3, dy=1, dist=3.2)
+###### MOVE - screen touch point: x=514, y=350 (dx=-12, dy=2, dist=12.2)
+###### MOVE - screen touch point: x=512, y=350 (dx=-2, dy=0, dist=2.0)
+###### MOVE - screen touch point: x=509, y=351 (dx=-3, dy=1, dist=3.2)
+-2, dy=0, dist=2.0)
+###### MOVE - screen touch point: x=505, y=351 (dx=-2, dy=0, dist=2.0)
+###### MOVE - screen touch point: x=504, y=350 (dx=-1, dy=-1, dist=1.4)
+###### MOVE - screen touch point: x=504, y=348 (dx=0, dy=-2, dist=2.0)
+###### MOVE - screen touch point: x=505, y=347 (dx=1, dy=-1, dist=1.4)
+###### MOVE - screen touch point: x=508, y=346 (dx=3, dy=-1, dist=3.2)
+###### MOVE - screen touch point: x=512, y=346 (dx=4, dy=0, dist=4.0)
+###### MOVE - screen touch point: x=514, y=345 (dx=2, dy=-1, dist=2.2)
+###### MOVE - screen touch point: x=534, y=345 (dx=20, dy=0, dist=20.0)
+###### MOVE - screen touch point: x=567, y=343 (dx=33, dy=-2, dist=33.1)
+###### MOVE - screen touch point: x=585, y=344 (dx=18, dy=1, dist=18.0)
+###### MOVE - screen touch point: x=675, y=341 (dx=90, dy=-3, dist=90.0)
+###### MOVE - screen touch point: x=724, y=338 (dx=49, dy=-3, dist=49.1)
+###### MOVE - screen touch point: x=751, y=337 (dx=27, dy=-1, dist=27.0)
+###### MOVE - screen touch point: x=773, y=337 (dx=22, dy=0, dist=22.0)
+###### MOVE - screen touch point: x=799, y=336 (dx=26, dy=-1, dist=26.0)
+###### MOVE - screen touch point: x=818, y=339 (dx=19, dy=3, dist=19.2)
+###### MOVE - screen touch point: x=832, y=339 (dx=14, dy=0, dist=14.0)
+###### MOVE - screen touch point: x=850, y=338 (dx=18, dy=-1, dist=18.0)
+###### UP - screen touch point: x=850, y=338
+###### DOWN - screen touch point: x=878, y=327
+###### UP - screen touch point: x=878, y=327
+###### DOWN - screen touch point: x=889, y=326
+###### MOVE - screen touch point: x=898, y=323 (dx=9, dy=-3, dist=9.5)
+###### MOVE - screen touch point: x=902, y=321 (dx=4, dy=-2, dist=4.5)
+###### MOVE - screen touch point: x=901, y=319 (dx=-1, dy=-2, dist=2.2)
+###### MOVE - screen touch point: x=897, y=318 (dx=-4, dy=-1, dist=4.1)
+###### MOVE - screen touch point: x=879, y=319 (dx=-18, dy=1, dist=18.0)
+###### MOVE - screen touch point: x=855, y=324 (dx=-24, dy=5, dist=24.5)
+###### MOVE - screen touch point: x=805, y=326 (dx=-50, dy=2, dist=50.0)
+ (dx=-14, dy=0, dist=14.0)
+###### MOVE - screen touch point: x=733, y=321 (dx=-58, dy=-5, dist=58.2)
+###### MOVE - screen touch point: x=712, y=324 (dx=-21, dy=3, dist=21.2)
+###### MOVE - screen touch point: x=689, y=324 (dx=-23, dy=0, dist=23.0)
+###### MOVE - screen touch point: x=680, y=326 (dx=-9, dy=2, dist=9.2)
+###### MOVE - screen touch point: x=657, y=325 (dx=-23, dy=-1, dist=23.0)
+###### MOVE - screen touch point: x=647, y=326 (dx=-10, dy=1, dist=10.0)
+###### MOVE - screen touch point: x=629, y=327 (dx=-18, dy=1, dist=18.0)
+###### MOVE - screen touch point: x=604, y=329 (dx=-25, dy=2, dist=25.1)
+###### MOVE - screen touch point: x=586, y=331 (dx=-18, dy=2, dist=18.1)
+###### MOVE - screen touch point: x=576, y=332 (dx=-10, dy=1, dist=10.0)
+###### UP - screen touch point: x=576, y=332
+###### DOWN - screen touch point: x=572, y=330
+###### MOVE - screen touch point: x=570, y=330 (dx=-2, dy=0, dist=2.0)
+###### UP - screen touch point: x=571, y=331
+2026-04-01 02:55:31.434950 PM [AirPlay] Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+[z-link][14:55:31.435]Modes changed: screen controller, mainAudio accessory, speech n/a (none), phone n/a, turns n/a
+###### DOWN - screen touch point: x=35, y=668
