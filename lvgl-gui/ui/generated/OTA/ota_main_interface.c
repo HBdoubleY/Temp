@@ -117,7 +117,7 @@ static ota_theme_type_t map_sys_theme_to_ota(THEME_MODE mode) {
     switch (mode) {
         case THEME_DARK:
             return THEME_OTA_NIGHT;
-        case THEME_AUTO:
+        // case THEME_AUTO:
         case THEME_DAY:
         default:
             return THEME_OTA_LIGHT;
@@ -126,7 +126,11 @@ static ota_theme_type_t map_sys_theme_to_ota(THEME_MODE mode) {
 
 static void ota_sync_from_sys_data(void) {
     ota_language_setting = g_sys_Data.current_language;
-    theme_set(map_sys_theme_to_ota(g_sys_Data.themeMode));
+    if(g_sys_Data.themeMode == THEME_DAY || (g_sys_Data.themeMode == THEME_AUTO && g_sys_Data.gpadcVol < 1300)){
+        theme_set(map_sys_theme_to_ota(THEME_DAY));
+	}else{
+        theme_set(map_sys_theme_to_ota(THEME_DARK));
+	}
 }
 
 /**

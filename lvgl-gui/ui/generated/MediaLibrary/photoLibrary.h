@@ -10,7 +10,8 @@
 extern "C" {
 #endif
 
-#include "../lvgl-gui/lvgl/demos/lv_demos.h"
+// #include "../lvgl-gui/lvgl/demos/lv_demos.h"
+#include "../lvgl-gui/lvgl/lvgl.h"
 #include <dirent.h>
 #include <string.h>
 #include <stdlib.h>

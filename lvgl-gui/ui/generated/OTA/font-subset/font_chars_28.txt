@@ -113,4 +113,9 @@ Başarısız
 실패
 Mislukt
 
+ !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+0123456789
+abcdefghijklmnopqrstuvwxyz
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
 符号：

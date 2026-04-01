@@ -529,11 +529,11 @@ LV_IMG_DECLARE(_rec_off_alpha_50x50);
 
 
 
-LV_FONT_DECLARE(lv_font_montserrat_12)
-LV_FONT_DECLARE(lv_font_montserrat_16)
-LV_FONT_DECLARE(lv_font_montserrat_25)
-LV_FONT_DECLARE(lv_font_montserrat_30)
-LV_FONT_DECLARE(lv_font_montserrat_35)
+// LV_FONT_DECLARE(lv_font_montserrat_12)
+// LV_FONT_DECLARE(lv_font_montserrat_16)
+// LV_FONT_DECLARE(lv_font_montserrat_25)
+// LV_FONT_DECLARE(lv_font_montserrat_30)
+// LV_FONT_DECLARE(lv_font_montserrat_35)
 
 LV_FONT_DECLARE(lv_font_harmonyOS_42)
 LV_FONT_DECLARE(lv_font_harmonyOS_40)

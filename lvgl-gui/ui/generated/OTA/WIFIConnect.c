@@ -696,7 +696,7 @@ static void apply_keyboard_daytime_style(lv_obj_t *kb) {
     lv_obj_set_style_shadow_color(kb, lv_color_hex(0x000000), LV_PART_ITEMS);
     lv_obj_set_style_shadow_opa(kb, LV_OPA_10, LV_PART_ITEMS);
     lv_obj_set_style_text_color(kb, lv_color_hex(0x333333), LV_PART_ITEMS);
-    lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, LV_PART_ITEMS);
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_30, LV_PART_ITEMS);
     
     /* 按下状态 - 浅蓝色 */
     lv_obj_set_style_bg_color(kb, lv_color_hex(0xE3F2FD), LV_PART_ITEMS | LV_STATE_PRESSED);
@@ -733,7 +733,7 @@ static void create_ask_dialog(lv_obj_t *parent, const char *txt) {
     g_wifi_ui.password_ta = lv_textarea_create(g_wifi_ui.dialog_bg);
     lv_obj_set_width(g_wifi_ui.password_ta, 460);
     lv_obj_set_height(g_wifi_ui.password_ta, 60);
-    lv_obj_set_style_text_font(g_wifi_ui.password_ta, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(g_wifi_ui.password_ta, &lv_font_montserrat_30, 0);
     lv_textarea_set_password_mode(g_wifi_ui.password_ta, false);
     lv_obj_clear_flag(g_wifi_ui.password_ta, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(g_wifi_ui.password_ta, TH_BG_INPUT, 0);

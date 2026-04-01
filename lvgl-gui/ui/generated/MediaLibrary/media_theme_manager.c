@@ -38,7 +38,7 @@ static const theme_colors_t g_theme_dark = {
     /* 文字颜色系列 */
     .text_primary   = 0xFFFFFF,   /* 白色 - 主要文字 */
     // .text_secondary = 0x888888,   /* 灰色 - 次要文字/描述 */
-    .text_secondary = 0x000000,   /* 黑色 - 次要文字/描述 */
+    .text_secondary = 0xFFFFFF,   /* 黑色 - 次要文字/描述 */
     .text_disabled  = 0x666666,   /* 暗灰 - 禁用状态 */
     
     /* 强调色系列 - 蓝色系 */
@@ -84,7 +84,8 @@ static const theme_colors_t g_theme_light = {
     
     /* 文字颜色系列 - 高对比度确保可读性 */
     .text_primary   = 0x1A1A1A,   /* 主文字 - 近似黑色（标题、文件名、重要内容） */
-    .text_secondary = 0x616161,   /* 次要文字 - 深灰（描述、提示、已找到X个文件） */
+    // .text_secondary = 0x616161,   /* 次要文字 - 深灰（描述、提示、已找到X个文件） */
+    .text_secondary = 0x000000,   /* 黑色 - 次要文字/描述 */
     .text_disabled  = 0x9E9E9E,   /* 禁用文字 - 中灰（不可用状态） */
     
     /* 强调色系列 - 蓝色系（选中、激活状态） */

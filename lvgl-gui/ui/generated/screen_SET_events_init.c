@@ -820,10 +820,10 @@ void screen_SET_btn_otaUpdata_event_handler(lv_event_t *e){
 	switch (code)
 	{
 	case LV_EVENT_CLICKED:
-		if(g_sys_Data.linktype == LINK_TYPE_ANDROIDAUTO || g_sys_Data.linktype == LINK_TYPE_CARPLAY){
-			show_label_with_timer(guider_ui.screen_label_Popup, "sys_txt_invalid", 1000);
-			return;
-		}
+		// if(g_sys_Data.linktype == LINK_TYPE_ANDROIDAUTO || g_sys_Data.linktype == LINK_TYPE_CARPLAY){
+		// 	show_label_with_timer(guider_ui.screen_label_Popup, "sys_txt_invalid", 1000);
+		// 	return;
+		// }
 
 		stop_label_timer(guider_ui.screen_label_Popup);
 

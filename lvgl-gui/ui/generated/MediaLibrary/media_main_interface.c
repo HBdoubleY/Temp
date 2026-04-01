@@ -34,7 +34,7 @@ static theme_type_t map_sys_theme_to_media(THEME_MODE mode) {
     switch (mode) {
         case THEME_DARK:
             return THEME_MDARK;
-        case THEME_AUTO:
+        // case THEME_AUTO:
         case THEME_DAY:
         default:
             return THEME_LIGHT;
@@ -43,7 +43,11 @@ static theme_type_t map_sys_theme_to_media(THEME_MODE mode) {
 
 static void media_sync_from_sys_data(void) {
     languageSetting = g_sys_Data.current_language;
-    setting_set_theme(map_sys_theme_to_media(g_sys_Data.themeMode));
+    if(g_sys_Data.themeMode == THEME_DAY || (g_sys_Data.themeMode == THEME_AUTO && g_sys_Data.gpadcVol < 1300)){
+		setting_set_theme(map_sys_theme_to_media(THEME_DAY));
+	}else{
+		setting_set_theme(map_sys_theme_to_media(THEME_DARK));
+	}
 }
 
 #if MEMTESTRSS
