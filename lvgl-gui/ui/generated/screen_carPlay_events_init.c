@@ -9,6 +9,7 @@
 #ifdef ENABLE_CARPLAY
 #include "carplay_display.h"
 #include "zlink_client.h"
+#include "lvgl_main.h"
 #endif
 
 void screen_carPlay_btn_return_event_handler(lv_event_t *e){
@@ -28,6 +29,9 @@ void screen_carPlay_btn_return_event_handler(lv_event_t *e){
 // 		carplay_display_destroy();
 // #endif
 		ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del, &guider_ui.screen_carPlay_del, setup_scr_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+#ifdef ENABLE_CARPLAY
+		link_ui_on_projection_exited();
+#endif
 		break;
 	default:
 		break;

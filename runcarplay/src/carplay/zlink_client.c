@@ -2,6 +2,7 @@
 
 #include "zlink_client.h"
 #include "carplay_display.h"
+#include "link_touch_evdev.h"
 #include "libzlink.h"
 #include "ComStruct.h"
 #include "Rtc2C.h"
@@ -204,8 +205,10 @@ static int session_state_cb(enum LIBZLINK_SESSION_STATE session_state, enum PHON
 		pthread_mutex_unlock(&g_video_state.mutex);
 
 		g_sys_Data.linktype = 0;
-		if (active)
+		if (active) {
 			carplay_display_destroy();
+			carplay_link_touch_set_active(0);
+		}
 	}
 	return 0;
 }
@@ -237,6 +240,7 @@ static int video_focus_cb(int is_hu_focus_on, void *user_data)
 		g_video_state.pending_home_link_type = g_sys_Data.linktype;
 		pthread_mutex_unlock(&g_video_state.mutex);
 		carplay_display_destroy();
+		carplay_link_touch_set_active(0);
 	} else {
 		printf("video_focus_request: request back to phone HMI\n");
 	}

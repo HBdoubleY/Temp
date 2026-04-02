@@ -178,11 +178,14 @@ $(CPPOBJS) : $(OBJROOTDIR)%.o:$(SRCDIR)%.cpp
 	$(CPP) -c $< -o $@  $(CPPFLAGS) $(CEDAR_INC) $(SRCINC)
 
 ifneq ($(CONFIG_CARPLAY),0)
-CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o
+CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
 $(OBJROOTDIR)/carplay/zlink_client.o: $(SRCDIR)/carplay/zlink_client.c
 	@mkdir -p $(OBJROOTDIR)/carplay
 	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
 $(OBJROOTDIR)/carplay_display/carplay_display.o: $(SRCDIR)/carplay_display/carplay_display.c
+	@mkdir -p $(OBJROOTDIR)/carplay_display
+	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
+$(OBJROOTDIR)/carplay_display/link_touch_evdev.o: $(SRCDIR)/carplay_display/link_touch_evdev.c
 	@mkdir -p $(OBJROOTDIR)/carplay_display
 	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
 else
@@ -200,7 +203,7 @@ $(BIN) : $(COBJS) $(CPPOBJS) $(CARPLAY_OBJS)
 .PHONY:clean cleanall distclean
 
 clean:
-	@rm -f $(BIN) $(COBJS) $(CPPOBJS) $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o
+	@rm -f $(BIN) $(COBJS) $(CPPOBJS) $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
 
 cleanall:
 	@rm -f $(CDEF) $(CPPDEF)

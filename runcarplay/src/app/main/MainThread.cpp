@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "sysfs.h"
 #include "sysarch.h"
 #include "sysapi.h"
@@ -34,6 +34,7 @@
 
 #ifdef ENABLE_CARPLAY
 #include "zlink_client.h"
+#include "link_touch_evdev.h"
 #endif
 
 void InitTarget(void) {
@@ -175,6 +176,9 @@ TThreadRet MainThread(void* pvPara) {
 
 // 	Sleep(3*1000);
 
+#ifdef ENABLE_CARPLAY
+	carplay_link_touch_init();
+#endif
 	LvglService(gsp.fb_width, gsp.fb_height);
 
 	sleep(3);

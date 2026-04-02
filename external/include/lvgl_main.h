@@ -9,6 +9,11 @@ extern "C"{
 extern int LvglService(int w, int h);
 extern int the_tick_to_extern(void);
 
+#ifdef ENABLE_CARPLAY
+void link_ui_on_projection_entered(void);
+void link_ui_on_projection_exited(void);
+#endif
+
 #if defined(__cplusplus)||defined(c_plusplus)
 }
 #endif

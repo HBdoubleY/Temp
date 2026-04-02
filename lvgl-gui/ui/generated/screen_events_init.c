@@ -15,6 +15,7 @@
 #ifdef ENABLE_CARPLAY
 #include "carplay_display.h"
 #include "zlink_client.h"
+#include "lvgl_main.h"
 #endif
 
 
@@ -129,25 +130,28 @@ static void screen_btn_carplay_event_handler (lv_event_t *e)
 		if(g_sys_Data.lockScreenFlag){
 			show_label_with_timer(guider_ui.screen_label_Popup, "main_txt_Locked", 1000);
 			return;
-		}	
+		}
 #ifdef ENABLE_CARPLAY
-		{
-			/* 仅当 session 已启动且当前为 CarPlay 连接时才进入投屏界面，否则只进提示界面 */
-			if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_CARPLAY) {
-				zlink_client_reset_video_prebuffer();
-				zlink_client_request_video_focus(1);
-				request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-				int disp_w = 720;
-				int disp_h = 1440;
-				carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
-				zlink_client_set_video_active(1);
-				zlink_client_request_video_focus(0);
-				request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-				// zlink_client_set_video_dump(1);
-			}
+		int projection_ok = 0;
+		/* 仅当 session 已启动且当前为 CarPlay 连接时才进入投屏界面，否则只进提示界面 */
+		if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_CARPLAY) {
+			zlink_client_reset_video_prebuffer();
+			zlink_client_request_video_focus(1);
+			request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+			int disp_w = 720;
+			int disp_h = 1440;
+			projection_ok = (carplay_display_create(0, 0, disp_w, disp_h, 1440, 720) == 0);
+			zlink_client_set_video_active(1);
+			zlink_client_request_video_focus(0);
+			request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+			// zlink_client_set_video_dump(1);
 		}
 #endif
 		ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del, &guider_ui.screen_del, setup_scr_screen_carPlay, LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+#ifdef ENABLE_CARPLAY
+		if (projection_ok)
+			link_ui_on_projection_entered();
+#endif
 		break;
 	}
     default:
@@ -160,29 +164,34 @@ static void screen_btn_androidauto_event_handler(lv_event_t *e){
 	switch (code)
 	{
 	case LV_EVENT_CLICKED:
+	{
 		if(g_sys_Data.lockScreenFlag){
 			show_label_with_timer(guider_ui.screen_label_Popup, "main_txt_Locked", 1000);
 			return;
-		}	
+		}
 #ifdef ENABLE_CARPLAY
-		{
-			/* 仅当 session 已启动且当前为 Android Auto 连接时才进入投屏界面，否则只进提示界面 */
-			if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_ANDROIDAUTO) {
-				zlink_client_reset_video_prebuffer();
-				zlink_client_request_video_focus(1);
-				request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-				int disp_w = 720;
-				int disp_h = 1440;
-				carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
-				zlink_client_set_video_active(1);
-				zlink_client_request_video_focus(0);
-				request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-				// zlink_client_set_video_dump(1);
-			}
+		int projection_ok_aa = 0;
+		/* 仅当 session 已启动且当前为 Android Auto 连接时才进入投屏界面，否则只进提示界面 */
+		if (zlink_client_is_session_started() && g_sys_Data.linktype == LINK_TYPE_ANDROIDAUTO) {
+			zlink_client_reset_video_prebuffer();
+			zlink_client_request_video_focus(1);
+			request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+			int disp_w = 720;
+			int disp_h = 1440;
+			projection_ok_aa = (carplay_display_create(0, 0, disp_w, disp_h, 1440, 720) == 0);
+			zlink_client_set_video_active(1);
+			zlink_client_request_video_focus(0);
+			request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+			// zlink_client_set_video_dump(1);
 		}
 #endif
 		ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del, &guider_ui.screen_del, setup_scr_screen_androidAuto, LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+#ifdef ENABLE_CARPLAY
+		if (projection_ok_aa)
+			link_ui_on_projection_entered();
+#endif
 		break;
+	}
 	default:
 		break;
 	}

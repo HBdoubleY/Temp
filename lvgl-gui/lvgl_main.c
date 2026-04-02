@@ -20,6 +20,7 @@
 #include "storageDataApi.h"
 #ifdef ENABLE_CARPLAY
 #include "carplay_display.h"
+#include "link_touch_evdev.h"
 #include "zlink_client.h"
 #endif
 #include "myTimer.h"
@@ -433,75 +434,20 @@ static void tire_ui_refresh_timer_cb(lv_timer_t *timer) {
 #endif
 
 #ifdef ENABLE_CARPLAY
+extern void createDashAnalogTimer(int delay_ms);
+extern void destoryDashAnalogTimer(void);
 
-static bool touch_pressed = false;
-static int last_x = -1, last_y = -1;
-#define TOUCH_MOVE_THRESHOLD 1
-#define TOUCH_MOVE_THRESHOLD_SQ (TOUCH_MOVE_THRESHOLD * TOUCH_MOVE_THRESHOLD)
+void link_ui_on_projection_entered(void)
+{
+	destoryDashAnalogTimer();
+	carplay_link_touch_set_active(1);
+}
 
-void lv_touch_feedback_cb(lv_indev_drv_t * drv, uint8_t event){
-    // printf("-----%s--------%d-----\n",__func__,__LINE__);
-    lv_point_t point;
-    lv_obj_t* current_screen = lv_scr_act();
-    LinkType type;
-
-    //screen save
-    if(g_sys_Data.agingMode.screenSaveSw){
-        resetDashAnalogTimer(g_sys_Data.agingMode.screenSaveTime * 1000);
-    }
-
-    if(current_screen == guider_ui.screen_androidAuto){
-        type = LINK_TYPE_ANDROIDAUTO;
-    }else if(current_screen == guider_ui.screen_carPlay){
-        type = LINK_TYPE_CARPLAY;
-    }else{
-        return;
-    }
-
-    lv_indev_get_point(lv_indev_get_act(), &point);
-    
-    switch (event){
-    case LV_EVENT_PRESSED:    
-
-        if (!touch_pressed) {
-            request_link_touchevent(type, true, point.x, point.y);
-            touch_pressed = true;
-            last_x = point.x;
-            last_y = point.y;
-            printf("###### DOWN - screen touch point: x=%d, y=%d\n", point.x, point.y);
-        }
-        break;
-        
-    case LV_EVENT_PRESSING:
-
-        if (touch_pressed) {
-            int dx = point.x - last_x;
-            int dy = point.y - last_y;
-
-            int distance_sq = dx*dx + dy*dy;
-            
-            if (distance_sq > TOUCH_MOVE_THRESHOLD_SQ) {
-                request_link_touchevent(type, true, point.x, point.y);
-                last_x = point.x;
-                last_y = point.y;
-                printf("###### MOVE - screen touch point: x=%d, y=%d (dx=%d, dy=%d, dist=%.1f)\n", 
-                    point.x, point.y, dx, dy, sqrt((float)distance_sq));
-            }
-        }
-        break;
-        
-    case LV_EVENT_RELEASED:
-
-        if (touch_pressed) {
-            // request_link_touchevent(type, false, point.x, point.y);
-            request_link_touchevent(type, false, last_x, last_y);
-            touch_pressed = false;
-            printf("###### UP - screen touch point: x=%d, y=%d\n", point.x, point.y);
-        }
-        break;
-    default:
-        break;
-    }
+void link_ui_on_projection_exited(void)
+{
+	carplay_link_touch_set_active(0);
+	if (g_sys_Data.agingMode.screenSaveSw)
+		createDashAnalogTimer(g_sys_Data.agingMode.screenSaveTime * 1000);
 }
 #endif
 
@@ -589,26 +535,30 @@ static void lvgl_handle_zlink_ui_requests(void)
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
             int disp_w = 720;
             int disp_h = 1440;
-            carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
             ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
                                   &guider_ui.screen_del, setup_scr_screen_carPlay,
                                   LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+            if (cr == 0)
+                link_ui_on_projection_entered();
         } else if (linktype == LINK_TYPE_ANDROIDAUTO) {
             zlink_client_reset_video_prebuffer();
             zlink_client_request_video_focus(1);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
             int disp_w = 720;
             int disp_h = 1440;
-            carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
             ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
                                   &guider_ui.screen_del, setup_scr_screen_androidAuto,
                                   LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+            if (cr == 0)
+                link_ui_on_projection_entered();
         }
     }
 
@@ -620,7 +570,7 @@ static void lvgl_handle_zlink_ui_requests(void)
                 ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del,
                                       &guider_ui.screen_carPlay_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
-
+                link_ui_on_projection_exited();
             }
         } else if (link_type == LINK_TYPE_ANDROIDAUTO) {
             if (cur == guider_ui.screen_androidAuto) {
@@ -628,7 +578,7 @@ static void lvgl_handle_zlink_ui_requests(void)
                 ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del,
                                       &guider_ui.screen_androidAuto_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
-
+                link_ui_on_projection_exited();
             }
         }
     }
@@ -683,14 +633,16 @@ int lvgl_main(int w, int h)
 #endif
     lv_disp_drv_register(&disp_drv);
 
+#ifdef ENABLE_CARPLAY
+    /* Same hor/ver/rot as disp_drv: matches lv_indev pointer rotation for zlink coords */
+    carplay_link_touch_configure((int)width, (int)height, (int)rotated);
+#endif
+
     evdev_init();
     static lv_indev_drv_t indev_drv;
     lv_indev_drv_init(&indev_drv);                /*Basic initialization*/
     indev_drv.type =LV_INDEV_TYPE_POINTER;        /*See below.*/
     indev_drv.read_cb = evdev_read;               /*See below.*/
-#ifdef ENABLE_CARPLAY
-    indev_drv.feedback_cb = lv_touch_feedback_cb;
-#endif
     /*Register the driver in LVGL and save the created input device object*/
     lv_indev_t * evdev_indev = lv_indev_drv_register(&indev_drv);
 
