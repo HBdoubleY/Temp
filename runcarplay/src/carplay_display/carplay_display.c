@@ -15,6 +15,8 @@
 
 extern int libzlink_touch_event(int x, int y, int is_touch_down);
 
+#include "carplay_thread_prio.h"
+
 extern int g_g2dfd;
 
 int carplay_touch_screen_x   = 0;
@@ -330,6 +332,7 @@ static int g2d_rotate_frame(VIDEO_FRAME_INFO_S *src, VIDEO_FRAME_INFO_S *dst)
 static void *decode_thread_fn(void *arg)
 {
 	(void)arg;
+	carplay_set_self_sched_fifo_max("carplay_decode");
 	VDEC_STREAM_S stream;
 	VIDEO_FRAME_INFO_S frame;
 	memset(&stream, 0, sizeof(stream));
@@ -417,6 +420,7 @@ static void *decode_thread_fn(void *arg)
 static void *display_thread_fn(void *arg)
 {
 	(void)arg;
+	carplay_set_self_sched_fifo_max("carplay_display");
 
 	while (g_ctx.running) {
 		VIDEO_FRAME_INFO_S frame;

@@ -16,6 +16,8 @@
 #include <unistd.h>
 
 /* Match lv_drv_conf / evdev.c defaults (no lv_drv_conf include in runcarplay). */
+#include "carplay_thread_prio.h"
+
 #ifndef LINK_TOUCH_EVDEV_FALLBACK
 #define LINK_TOUCH_EVDEV_FALLBACK "/dev/input/touchscreen"
 #endif
@@ -33,7 +35,7 @@ static int g_disp_hor = 1440;
 static int g_disp_ver = 720;
 static int g_disp_rot; /* 0=LV_DISP_ROT_NONE, 1=90, 2=180, 3=270 — same as lv_disp_rot_t */
 
-#define TOUCH_MOVE_THRESHOLD 1
+#define TOUCH_MOVE_THRESHOLD 8
 #define TOUCH_MOVE_THRESHOLD_SQ (TOUCH_MOVE_THRESHOLD * TOUCH_MOVE_THRESHOLD)
 
 #define EVDEV_NOISE_FILTER_TIME_MS 100
@@ -269,6 +271,7 @@ static void run_emit_after_batch(void)
 static void *link_touch_thread_fn(void *arg)
 {
 	(void)arg;
+	carplay_set_self_sched_fifo_max("carplay_touch");
 	struct pollfd pfd;
 
 	if (g_evdev_fd < 0)
