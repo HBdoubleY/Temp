@@ -37,6 +37,10 @@ static int screanHeight = 720;
 static int i2c0_fd = -1;
 static int i2c1_fd = -1;
 
+static bool stop_lvgl = false;
+/* 切到 CarPlay 全透明界面后若立刻停 lv_task_handler，首帧 flush 可能不发生，底层 VO 会被旧 UI 盖住 */
+static int lvgl_post_projection_flush_frames = 0;
+
 lv_timer_t *DVRstaTimer = NULL;
 
 
@@ -521,45 +525,70 @@ static void lvgl_handle_zlink_ui_requests(void)
     bool on_target_screen = (cur == guider_ui.screen || cur == guider_ui.screen_carPlay || cur == guider_ui.screen_androidAuto);
 
     static int last_session_started = -1;
+    static bool pending_carplay_projection = false;
+    static bool pending_androidauto_projection = false;
     bool session_rising = (session_started == 1 && last_session_started != 1);
     last_session_started = session_started;
 
     if (session_rising) {
         bt_serial_send("CD");
+        /* session_rising 只一帧：若当时不在主页/互联入口屏，自动投屏整段被跳过；记下来回到主页再进 */
+        if (!on_target_screen) {
+            if (linktype == LINK_TYPE_CARPLAY)
+                pending_carplay_projection = true;
+            else if (linktype == LINK_TYPE_ANDROIDAUTO)
+                pending_androidauto_projection = true;
+        }
+    }
+    if (!session_started) {
+        pending_carplay_projection = false;
+        pending_androidauto_projection = false;
     }
 
-    if (session_rising && on_target_screen) {
-        if (linktype == LINK_TYPE_CARPLAY) {
-            zlink_client_reset_video_prebuffer();
-            zlink_client_request_video_focus(1);
-            request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-            int disp_w = 720;
-            int disp_h = 1440;
-            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
-            zlink_client_set_video_active(1);
-            zlink_client_request_video_focus(0);
-            request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-            ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
-                                  &guider_ui.screen_del, setup_scr_screen_carPlay,
-                                  LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
-            if (cr == 0)
-                link_ui_on_projection_entered();
-        } else if (linktype == LINK_TYPE_ANDROIDAUTO) {
-            zlink_client_reset_video_prebuffer();
-            zlink_client_request_video_focus(1);
-            request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
-            int disp_w = 720;
-            int disp_h = 1440;
-            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
-            zlink_client_set_video_active(1);
-            zlink_client_request_video_focus(0);
-            request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-            ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
-                                  &guider_ui.screen_del, setup_scr_screen_androidAuto,
-                                  LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
-            if (cr == 0)
-                link_ui_on_projection_entered();
+    bool enter_carplay = (session_started && on_target_screen && linktype == LINK_TYPE_CARPLAY) &&
+        (session_rising || pending_carplay_projection);
+    bool enter_androidauto = (session_started && on_target_screen && linktype == LINK_TYPE_ANDROIDAUTO) &&
+        (session_rising || pending_androidauto_projection);
+
+    if (enter_carplay) {
+        pending_carplay_projection = false;
+        zlink_client_reset_video_prebuffer();
+        zlink_client_request_video_focus(1);
+        request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+        int disp_w = 720;
+        int disp_h = 1440;
+        int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        zlink_client_set_video_active(1);
+        zlink_client_request_video_focus(0);
+        request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+        ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
+                              &guider_ui.screen_del, setup_scr_screen_carPlay,
+                              LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+        if (cr == 0) {
+            link_ui_on_projection_entered();
+            stop_lvgl = true;
+            lvgl_post_projection_flush_frames = 12;
+        } else {
+            printf("[lvgl] carplay_display_create failed, ret=%d\n", cr);
         }
+    } else if (enter_androidauto) {
+        pending_androidauto_projection = false;
+        zlink_client_reset_video_prebuffer();
+        zlink_client_request_video_focus(1);
+        request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+        int disp_w = 720;
+        int disp_h = 1440;
+        int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        zlink_client_set_video_active(1);
+        zlink_client_request_video_focus(0);
+        request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+        ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
+                              &guider_ui.screen_del, setup_scr_screen_androidAuto,
+                              LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+        if (cr == 0)
+            link_ui_on_projection_entered();
+        else
+            printf("[lvgl] carplay_display_create (AA) failed, ret=%d\n", cr);
     }
 
     int link_type = zlink_client_take_pending_home_request();
@@ -571,6 +600,8 @@ static void lvgl_handle_zlink_ui_requests(void)
                                       &guider_ui.screen_carPlay_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
                 link_ui_on_projection_exited();
+                stop_lvgl = false;
+                lvgl_post_projection_flush_frames = 0;
             }
         } else if (link_type == LINK_TYPE_ANDROIDAUTO) {
             if (cur == guider_ui.screen_androidAuto) {
@@ -670,12 +701,19 @@ int lvgl_main(int w, int h)
 //--------------------------------------------------------------
     /*Handle LitlevGL tasks (tickless mode)*/
     while(1) {
-        lv_task_handler();
+        /* CarPlay 投屏时只停 UI 刷新/动画/定时器，不退出线程；切全透明屏后多刷几帧再停，否则底层 VO 可能被旧 UI 盖住 */
+        if (!stop_lvgl || lvgl_post_projection_flush_frames > 0) {
+            lv_task_handler();
+            if (lvgl_post_projection_flush_frames > 0)
+                lvgl_post_projection_flush_frames--;
+        }
 #ifdef ENABLE_CARPLAY
         lvgl_handle_zlink_ui_requests();
 #endif
         usleep(5000);
     }
+
+
     tp2804_i2c_deinit(&i2c0_fd);
     tp2804_i2c_deinit(&i2c1_fd);
 
