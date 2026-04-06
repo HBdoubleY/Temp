@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <sys/time.h>
 
 #define LINK_TYPE_CARPLAY       2
 #define LINK_TYPE_ANDROIDAUTO   3
@@ -50,6 +51,16 @@ static struct {
 } g_video_dump = {
 	.mutex = PTHREAD_MUTEX_INITIALIZER,
 };
+
+static int g_last_focus_req = -1;
+static long long g_last_focus_req_ms = 0;
+
+static long long zlink_now_ms(void)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
+}
 
 static int packet_has_sps(const char *data, int len)
 {
@@ -232,15 +243,26 @@ static int mic_stop_cb(enum ZLINK_MEDIA_TYPE media_type, void *user_data) { (voi
 static int video_focus_cb(int is_hu_focus_on, void *user_data)
 {
 	(void)user_data;
+	long long now = zlink_now_ms();
+	if (g_last_focus_req == is_hu_focus_on && (now - g_last_focus_req_ms) < 1200) {
+		printf("video_focus_request: debounced (focus=%d)\n", is_hu_focus_on);
+		return 0;
+	}
+	g_last_focus_req = is_hu_focus_on;
+	g_last_focus_req_ms = now;
 
 	if (is_hu_focus_on) {
+		int was_active = 0;
 		printf("video_focus_request: request back to HU HMI\n");
 		pthread_mutex_lock(&g_video_state.mutex);
+		was_active = g_video_state.active;
 		g_video_state.active = 0;
 		g_video_state.pending_home_link_type = g_sys_Data.linktype;
 		pthread_mutex_unlock(&g_video_state.mutex);
-		carplay_display_destroy();
-		carplay_link_touch_set_active(0);
+		if (was_active) {
+			carplay_display_destroy();
+			carplay_link_touch_set_active(0);
+		}
 	} else {
 		printf("video_focus_request: request back to phone HMI\n");
 	}

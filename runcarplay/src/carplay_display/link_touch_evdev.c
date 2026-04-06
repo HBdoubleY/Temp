@@ -35,10 +35,8 @@ static int g_disp_hor = 1440;
 static int g_disp_ver = 720;
 static int g_disp_rot; /* 0=LV_DISP_ROT_NONE, 1=90, 2=180, 3=270 — same as lv_disp_rot_t */
 
-#define TOUCH_MOVE_THRESHOLD 8
-#define TOUCH_MOVE_THRESHOLD_SQ (TOUCH_MOVE_THRESHOLD * TOUCH_MOVE_THRESHOLD)
-
-#define EVDEV_NOISE_FILTER_TIME_MS 100
+#define TOUCH_MOVE_THRESHOLD_DEFAULT 3
+#define EVDEV_NOISE_FILTER_TIME_MS_DEFAULT 25
 
 #define ST_REL 0
 #define ST_PR  1
@@ -56,6 +54,9 @@ static int g_evdev_button = ST_REL;
 static long long g_last_event_time_ms;
 static int g_last_valid_x;
 static int g_last_valid_y;
+static int g_touch_move_threshold = TOUCH_MOVE_THRESHOLD_DEFAULT;
+static int g_touch_move_threshold_sq = TOUCH_MOVE_THRESHOLD_DEFAULT * TOUCH_MOVE_THRESHOLD_DEFAULT;
+static int g_noise_filter_time_ms = EVDEV_NOISE_FILTER_TIME_MS_DEFAULT;
 
 static pthread_t g_thread;
 static int g_thread_started;
@@ -65,6 +66,28 @@ static long long link_touch_now_ms(void)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
+}
+
+static void link_touch_load_tuning(void)
+{
+	const char *mv = getenv("LINK_TOUCH_MOVE_THRESHOLD");
+	const char *nf = getenv("LINK_TOUCH_NOISE_FILTER_MS");
+
+	if (mv && mv[0] != '\0') {
+		int v = atoi(mv);
+		if (v >= 1 && v <= 20) {
+			g_touch_move_threshold = v;
+			g_touch_move_threshold_sq = v * v;
+		}
+	}
+	if (nf && nf[0] != '\0') {
+		int v = atoi(nf);
+		if (v >= 0 && v <= 200) {
+			g_noise_filter_time_ms = v;
+		}
+	}
+	printf("link_touch tuning: move_threshold=%dpx noise_filter=%dms\n",
+	       g_touch_move_threshold, g_noise_filter_time_ms);
 }
 
 static int open_link_evdev_fd(void)
@@ -147,7 +170,7 @@ static void emit_link_touch_locked(int x, int y, int cur_pr)
 			int dy = y - g_seq_y;
 			int dist_sq = dx * dx + dy * dy;
 
-			if (dist_sq > TOUCH_MOVE_THRESHOLD_SQ) {
+			if (dist_sq > g_touch_move_threshold_sq) {
 				clamp_logical_xy(&x, &y);
 				carplay_touch_send_xy(x, y, 1);
 				g_seq_x = x;
@@ -246,7 +269,7 @@ static void run_emit_after_batch(void)
 	int current_state = g_evdev_button;
 	int out_x, out_y;
 
-	if (g_evdev_button == ST_PR && (now - g_last_event_time_ms) > EVDEV_NOISE_FILTER_TIME_MS) {
+	if (g_evdev_button == ST_PR && (now - g_last_event_time_ms) > g_noise_filter_time_ms) {
 		current_state = ST_REL;
 		g_evdev_button = ST_REL;
 	}
@@ -349,6 +372,7 @@ void carplay_link_touch_init(void)
 	g_evdev_root_x = 0;
 	g_evdev_root_y = 0;
 	g_evdev_button = ST_REL;
+	link_touch_load_tuning();
 	g_last_event_time_ms = link_touch_now_ms();
 	g_last_valid_x = 0;
 	g_last_valid_y = 0;

@@ -29,6 +29,7 @@
 #include "bootlogoUp.h"
 #include "bt_serial.h"
 #include "tire_manager.h"
+#include "mpp_camera.h"
 
 static pthread_t threadID;
 lv_ui guider_ui;
@@ -66,6 +67,79 @@ void PrintTime() {
 
 static bool carplay_connected = false;
 static bool androidauto_connected = false;
+static pthread_t recorder_worker_tid;
+static pthread_mutex_t recorder_worker_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t recorder_worker_cond = PTHREAD_COND_INITIALIZER;
+static int recorder_worker_req = -1; /* -1: none, 0: stop, 1: start */
+static bool recorder_worker_backend_running = false;
+
+static void recorder_worker_request(int req)
+{
+    pthread_mutex_lock(&recorder_worker_mutex);
+    recorder_worker_req = req;
+    pthread_cond_signal(&recorder_worker_cond);
+    pthread_mutex_unlock(&recorder_worker_mutex);
+}
+
+void recorder_request_start_async(void)
+{
+    recorder_worker_request(1);
+}
+
+void recorder_request_stop_async(void)
+{
+    recorder_worker_request(0);
+}
+
+static void *recorder_worker_thread(void *arg)
+{
+    (void)arg;
+    while (1) {
+        int req = -1;
+        pthread_mutex_lock(&recorder_worker_mutex);
+        while (recorder_worker_req < 0) {
+            pthread_cond_wait(&recorder_worker_cond, &recorder_worker_mutex);
+        }
+        req = recorder_worker_req;
+        recorder_worker_req = -1;
+        pthread_mutex_unlock(&recorder_worker_mutex);
+
+        if (req == 1) {
+            if (recorder_worker_backend_running) {
+                continue;
+            }
+            if (g_sys_Data.recorderMode == RECORDER_URGENT) {
+                deletFileInRecorderPath(U_REC_PATH);
+            } else {
+                deletFileInRecorderPath(REC_PATH);
+            }
+            printf("[recorder_worker] start recording...\n");
+            int r0 = recording(&g_sys_Data.vipp0_config);
+            int r1 = recording(&g_sys_Data.vipp8_config);
+            if (r0 == 0 && r1 == 0) {
+                dashTimeMark(&g_sys_Data.vipp0_config, g_sys_Data.TimeMark);
+                dashTimeMark(&g_sys_Data.vipp8_config, g_sys_Data.TimeMark);
+                SoundRecording(&g_sys_Data.vipp0_config, g_sys_Data.SoundRecorder);
+                SoundRecording(&g_sys_Data.vipp8_config, g_sys_Data.SoundRecorder);
+                recorder_worker_backend_running = true;
+            } else {
+                printf("[recorder_worker] start failed: r0=%d, r1=%d\n", r0, r1);
+                stopRecording(&g_sys_Data.vipp0_config);
+                stopRecording(&g_sys_Data.vipp8_config);
+                g_sys_Data.recorderMode = RECORDER_NONE;
+                recorder_worker_backend_running = false;
+            }
+        } else if (req == 0) {
+            if (!recorder_worker_backend_running) {
+                continue;
+            }
+            stopRecording(&g_sys_Data.vipp0_config);
+            stopRecording(&g_sys_Data.vipp8_config);
+            recorder_worker_backend_running = false;
+        }
+    }
+    return NULL;
+}
 
 static void bt_status_check_timer(lv_timer_t *timer) { 
     lv_obj_t* current_screen = lv_scr_act();
@@ -74,6 +148,20 @@ static void bt_status_check_timer(lv_timer_t *timer) {
     static char last_bt_label[64] = {0};
     bool frontCamera = tp2804_check_camera_connected(i2c0_fd);
     bool rearCamera = tp2804_check_camera_connected(i2c1_fd);
+    if (mpp_camera_take_storage_fault()) {
+        if (g_sys_Data.recorderMode == RECORDER_NORMAL || g_sys_Data.recorderMode == RECORDER_URGENT) {
+            printf("[lvgl] storage fault detected, force stop recording.\n");
+            recorder_request_stop_async();
+            g_sys_Data.recorderMode = RECORDER_NONE;
+            if (DVRstaTimer != NULL) {
+                lv_timer_del(DVRstaTimer);
+                DVRstaTimer = NULL;
+            }
+            clearRecorderStatu();
+            if (is_popup_visible_v8) close_popup_v8();
+            show_popup_simple_v8(get_string_for_language(g_sys_Data.current_language, "main_txt_TFNotFreeMem"));
+        }
+    }
 
     if (current_screen == guider_ui.screen && lv_obj_is_valid(guider_ui.screen_img_wifi)) {
         bool want_show = WIFIConnect_is_connected_cached();
@@ -187,8 +275,7 @@ static void bt_status_check_timer(lv_timer_t *timer) {
                 show_label_with_timer(guider_ui.screen_DVR_label_Popup, "dvr_txt_stopRecorder", 1000);
             }
             #if 1
-            stopRecording(&g_sys_Data.vipp0_config);
-            stopRecording(&g_sys_Data.vipp8_config);
+            recorder_request_stop_async();
             #endif
             g_sys_Data.recorderMode = RECORDER_NONE;
             if(DVRstaTimer != NULL){
@@ -216,17 +303,7 @@ static void bt_status_check_timer(lv_timer_t *timer) {
                         show_popup_simple_v8(get_string_for_language(g_sys_Data.current_language,"main_txt_TFNotFreeMem"));
                         return;
                     }
-                    deletFileInRecorderPath(REC_PATH);
-                    printf("start to recording!!!!!\n");
-                    recording(&g_sys_Data.vipp0_config);
-                    recording(&g_sys_Data.vipp8_config);
-
-                    dashTimeMark(&g_sys_Data.vipp0_config, g_sys_Data.TimeMark);
-                    dashTimeMark(&g_sys_Data.vipp8_config, g_sys_Data.TimeMark);
-
-            
-                    SoundRecording(&g_sys_Data.vipp0_config, g_sys_Data.SoundRecorder);
-                    SoundRecording(&g_sys_Data.vipp8_config, g_sys_Data.SoundRecorder);
+                    recorder_request_start_async();
                     #endif
                     if(DVRstaTimer == NULL) DVRstaTimer = lv_timer_create(recorder_status_timer, 1000, NULL);    
                 }
@@ -241,8 +318,7 @@ static void bt_status_check_timer(lv_timer_t *timer) {
 
                 }
                 #if 1
-                stopRecording(&g_sys_Data.vipp0_config);
-                stopRecording(&g_sys_Data.vipp8_config);
+                recorder_request_stop_async();
                 #endif
                 g_sys_Data.recorderMode = RECORDER_NONE;
                 if(DVRstaTimer != NULL){
@@ -251,12 +327,12 @@ static void bt_status_check_timer(lv_timer_t *timer) {
                 }			
                 clearRecorderStatu();
             }
-            if(current_screen == guider_ui.screen_DVR && lv_obj_is_valid(guider_ui.screen_DVR_img_rec)){
-                ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del, &guider_ui.screen_DVR_del, setup_scr_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
-                stopPreview(&g_sys_Data.vipp0_config);
-                stopPreview(&g_sys_Data.vipp8_config);		
-                g_sys_Data.previewMode = PREVIEW_NONE; 
-            }             
+            // if(current_screen == guider_ui.screen_DVR && lv_obj_is_valid(guider_ui.screen_DVR_img_rec)){
+            //     ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del, &guider_ui.screen_DVR_del, setup_scr_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+            //     stopPreview(&g_sys_Data.vipp0_config);
+            //     stopPreview(&g_sys_Data.vipp8_config);		
+            //     g_sys_Data.previewMode = PREVIEW_NONE; 
+            // }             
         }
     }
 
@@ -527,6 +603,24 @@ static void lvgl_handle_zlink_ui_requests(void)
     static int last_session_started = -1;
     static bool pending_carplay_projection = false;
     static bool pending_androidauto_projection = false;
+    static int last_video_ctrl_state_cp = -1;
+    static int last_video_ctrl_state_aa = -1;
+    static uint64_t last_video_ctrl_ts_cp = 0;
+    static uint64_t last_video_ctrl_ts_aa = 0;
+    const uint64_t focus_debounce_ms = 800;
+
+#define REQUEST_VIDEO_CTRL_DEBOUNCED(lt, state) do { \
+        uint64_t now = (uint64_t)custom_tick_get(); \
+        int *last_state = ((lt) == LINK_TYPE_CARPLAY) ? &last_video_ctrl_state_cp : &last_video_ctrl_state_aa; \
+        uint64_t *last_ts = ((lt) == LINK_TYPE_CARPLAY) ? &last_video_ctrl_ts_cp : &last_video_ctrl_ts_aa; \
+        if (!(*last_state == (state) && (now - *last_ts) < focus_debounce_ms)) { \
+            *last_state = (state); \
+            *last_ts = now; \
+            request_link_action((lt), LINK_ACTION_VIDEO_CTRL, (state), NULL); \
+        } else { \
+            printf("[lvgl] video ctrl debounced: link=%d state=%d\n", (lt), (state)); \
+        } \
+    } while (0)
     bool session_rising = (session_started == 1 && last_session_started != 1);
     last_session_started = session_started;
 
@@ -554,13 +648,13 @@ static void lvgl_handle_zlink_ui_requests(void)
         pending_carplay_projection = false;
         zlink_client_reset_video_prebuffer();
         zlink_client_request_video_focus(1);
-        request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+        REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_CARPLAY, 0);
         int disp_w = 720;
         int disp_h = 1440;
         int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
         zlink_client_set_video_active(1);
         zlink_client_request_video_focus(0);
-        request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+        REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_CARPLAY, 1);
         ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
                               &guider_ui.screen_del, setup_scr_screen_carPlay,
                               LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
@@ -575,13 +669,13 @@ static void lvgl_handle_zlink_ui_requests(void)
         pending_androidauto_projection = false;
         zlink_client_reset_video_prebuffer();
         zlink_client_request_video_focus(1);
-        request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+        REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 0);
         int disp_w = 720;
         int disp_h = 1440;
         int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
         zlink_client_set_video_active(1);
         zlink_client_request_video_focus(0);
-        request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
+        REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 1);
         ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
                               &guider_ui.screen_del, setup_scr_screen_androidAuto,
                               LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
@@ -595,7 +689,7 @@ static void lvgl_handle_zlink_ui_requests(void)
     if (link_type != 0) {
         if (link_type == LINK_TYPE_CARPLAY) {
             if (cur == guider_ui.screen_carPlay) {
-                request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+                REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_CARPLAY, 0);
                 ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del,
                                       &guider_ui.screen_carPlay_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
@@ -605,7 +699,7 @@ static void lvgl_handle_zlink_ui_requests(void)
             }
         } else if (link_type == LINK_TYPE_ANDROIDAUTO) {
             if (cur == guider_ui.screen_androidAuto) {
-                request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
+                REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 0);
                 ui_load_scr_animation(&guider_ui, &guider_ui.screen, guider_ui.screen_del,
                                       &guider_ui.screen_androidAuto_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
@@ -614,6 +708,7 @@ static void lvgl_handle_zlink_ui_requests(void)
         }
     }
     lvgl_refresh_main_link_labels();
+#undef REQUEST_VIDEO_CTRL_DEBOUNCED
 }
 #endif
 
@@ -696,6 +791,8 @@ int lvgl_main(int w, int h)
         autoModeTimer = lv_timer_create(creatAutoModeTimerCbk, 1000, NULL);
     }
 
+    pthread_create(&recorder_worker_tid, NULL, recorder_worker_thread, NULL);
+    pthread_detach(recorder_worker_tid);
     lv_timer_create(bt_status_check_timer, 500, NULL);
 	tire_ui_refresh_now();
 //--------------------------------------------------------------

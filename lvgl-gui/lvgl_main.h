@@ -8,6 +8,8 @@ extern "C"{
 
 extern int LvglService(int w, int h);
 extern int the_tick_to_extern(void);
+void recorder_request_start_async(void);
+void recorder_request_stop_async(void);
 
 #ifdef ENABLE_CARPLAY
 void link_ui_on_projection_entered(void);
