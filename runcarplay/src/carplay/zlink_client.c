@@ -22,6 +22,7 @@
 extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
+static int g_session_fps = 20;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
@@ -131,6 +132,17 @@ static int link_type_from_phone_type(enum PHONE_TYPE phone_type)
 	}
 }
 
+static void zlink_load_session_tuning(void)
+{
+	const char *fps = getenv("ZLINK_SESSION_FPS");
+	if (fps && fps[0] != '\0') {
+		int v = atoi(fps);
+		if (v >= 15 && v <= 30)
+			g_session_fps = v;
+	}
+	printf("zlink session tuning: fps=%d\n", g_session_fps);
+}
+
 static void session_init(void)
 {
 	static struct SESSION_DATA session_data;
@@ -139,7 +151,7 @@ static void session_init(void)
 	session_data.height = 720;
 	session_data.width_margin = 0;
 	session_data.height_margin = 0;
-	session_data.fps = 30;
+	session_data.fps = g_session_fps;
 	session_data.density = 230;
 	session_data.is_right_hand = 0;
 	session_data.is_night_mode = 0;
@@ -328,6 +340,7 @@ static void register_callbacks(void)
 
 void zlink_client_run(void)
 {
+	zlink_load_session_tuning();
 	register_callbacks();
 	g_handle = libzlink_init(NULL);
 	if (!g_handle) {

@@ -83,6 +83,9 @@ static int g_dbg_single_rec_ch = 0;
 static int g_dbg_disable_fsync = 0;
 static int g_dbg_disable_preview_g2d = 0;
 static int g_dbg_fsync_interval_ms = 3000;
+static int g_rec_audio_enable = 0;
+static int g_rec_bitrate = 2 * 1024 * 1024;
+static int g_enable_fsync = 0;
 static int g_dbg_switches_inited = 0;
 static volatile int g_mpp_storage_fault = 0;
 static long long g_last_storage_fault_log_ms = 0;
@@ -122,6 +125,16 @@ static void mpp_debug_switches_init_once(void)
     g_dbg_single_rec_ch = (getenv("MPP_DBG_SINGLE_REC_CH") != NULL);
     g_dbg_disable_fsync = (getenv("MPP_DBG_DISABLE_FSYNC") != NULL);
     g_dbg_disable_preview_g2d = (getenv("MPP_DBG_DISABLE_PREVIEW_G2D") != NULL);
+    g_enable_fsync = (getenv("MPP_ENABLE_FSYNC") != NULL);
+    g_rec_audio_enable = (getenv("MPP_REC_ENABLE_AUDIO") != NULL);
+
+    const char *rec_bitrate = getenv("MPP_REC_BITRATE");
+    if (rec_bitrate && rec_bitrate[0] != '\0') {
+        int bps = atoi(rec_bitrate);
+        if (bps >= 1024 * 1024 && bps <= 16 * 1024 * 1024) {
+            g_rec_bitrate = bps;
+        }
+    }
     const char *fsync_interval = getenv("MPP_DBG_FSYNC_INTERVAL_MS");
     if (fsync_interval && fsync_interval[0] != '\0') {
         int ms = atoi(fsync_interval);
@@ -129,6 +142,12 @@ static void mpp_debug_switches_init_once(void)
             g_dbg_fsync_interval_ms = ms;
         }
     }
+    if (g_dbg_disable_fsync) {
+        g_enable_fsync = 0;
+    }
+
+    printf("[mpp_cfg] rec_audio=%d rec_bitrate=%d enable_fsync=%d\n",
+           g_rec_audio_enable, g_rec_bitrate, g_enable_fsync);
     printf("[mpp_dbg] switches: single_rec_ch=%d, disable_fsync=%d, disable_preview_g2d=%d, fsync_interval_ms=%d\n",
            g_dbg_single_rec_ch, g_dbg_disable_fsync, g_dbg_disable_preview_g2d, g_dbg_fsync_interval_ms);
 }
@@ -928,13 +947,13 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
     pContext->m_vi.mViDropFrameNum = 0;
     pContext->m_vi.mEnableWDR = 0;
 
-    pContext->m_vo.mDispType = VO_INTF_LCD;
-    pContext->m_vo.mDispSync = VO_OUTPUT_NTSC;
+    // pContext->m_vo.mDispType = VO_INTF_LCD;
+    // pContext->m_vo.mDispSync = VO_OUTPUT_NTSC;
 
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
     pContext->m_venc.mFrameRate = 25;
-    pContext->m_venc.mBitRate = 1048576 * 8;
+    pContext->m_venc.mBitRate = g_rec_bitrate;
     pContext->m_venc.mRcMode = 0;
     pContext->m_venc.mEncoderFmt = PT_H264;
 
@@ -2355,17 +2374,22 @@ static ERRORTYPE prepare(mpp_camera_para_conf *pContext){
 //------------------------------------------------------------------------------------
     setOverlayToVencChn(pContext);
 
-    if(pContext->m_ai.mAiChn.mChnId >= 0 && pContext->m_aenc.mAEncChn.mChnId >= 0 && pContext->m_mux.mMuxChn >= 0){
+    if(g_rec_audio_enable &&
+       pContext->m_ai.mAiChn.mChnId >= 0 &&
+       pContext->m_aenc.mAEncChn.mChnId >= 0 &&
+       pContext->m_mux.mMuxChn >= 0){
         AW_MPI_SYS_Bind(&pContext->m_ai.mAiChn, &pContext->m_aenc.mAEncChn);
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
         AW_MPI_SYS_Bind(&pContext->m_aenc.mAEncChn, &MuxChn);
     }
 
-    result = AW_MPI_AI_EnableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
-    if (result != SUCCESS)
-    {
-        printf("AI enable error!\n");
-        return result;
+    if (g_rec_audio_enable) {
+        result = AW_MPI_AI_EnableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
+        if (result != SUCCESS)
+        {
+            printf("AI enable error!\n");
+            return result;
+        }
     }
     return SUCCESS;
 }
@@ -2378,7 +2402,9 @@ static ERRORTYPE startVideoRecording(mpp_camera_para_conf *pContext){
     {
         pContext->mRecorderFlag = 1;
         AW_MPI_VENC_StartRecvPic(pContext->m_venc.mVEncChn);
-        AW_MPI_AENC_StartRecvPcm(pContext->m_aenc.mAEncChnId); 
+        if (g_rec_audio_enable) {
+            AW_MPI_AENC_StartRecvPcm(pContext->m_aenc.mAEncChnId);
+        }
         AW_MPI_MUX_StartChn(pContext->m_mux.mMuxChn);
 
     }
@@ -2399,7 +2425,9 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
     destroyTimestampOverlay(pContext);
     AW_MPI_MUX_StopChn(pContext->m_mux.mMuxChn, FALSE);
     AW_MPI_VENC_StopRecvPic(pContext->m_venc.mVEncChn);
-    AW_MPI_AENC_StopRecvPcm(pContext->m_aenc.mAEncChnId);
+    if (g_rec_audio_enable) {
+        AW_MPI_AENC_StopRecvPcm(pContext->m_aenc.mAEncChnId);
+    }
     if (pContext->m_venc.mVEncChn >= 0 && pContext->m_mux.mMuxChn >= 0)
     {
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
@@ -2407,7 +2435,10 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
 
         AW_MPI_SYS_UnBind(&VeChn, &MuxChn);
     }
-    if(pContext->m_ai.mAiChn.mChnId >= 0 && pContext->m_aenc.mAEncChn.mChnId >= 0 && pContext->m_mux.mMuxChn >= 0){  
+    if(g_rec_audio_enable &&
+       pContext->m_ai.mAiChn.mChnId >= 0 &&
+       pContext->m_aenc.mAEncChn.mChnId >= 0 &&
+       pContext->m_mux.mMuxChn >= 0){
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
         AW_MPI_SYS_UnBind(&pContext->m_aenc.mAEncChn, &MuxChn);
         AW_MPI_AI_DisableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
@@ -2416,8 +2447,10 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
 
     AW_MPI_MUX_DestroyChn(pContext->m_mux.mMuxChn);
     AW_MPI_VENC_DestroyChn(pContext->m_venc.mVEncChn);
-    AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId); 
-    AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
+    if (g_rec_audio_enable) {
+        AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId);
+        AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
+    }
 
    
     return SUCCESS;
@@ -2445,7 +2478,7 @@ ERRORTYPE initVi(mpp_camera_para_conf *pContext, VI_DEV videv, VI_CHN vichn){
     }
 #endif
 
-    if (!g_dbg_disable_fsync) {
+    if (g_enable_fsync) {
         ret = pthread_create(&pContext->mfsyncThreadId, NULL, FsyncFrameThread, pContext);
         if (ret != 0)
         {
@@ -2458,7 +2491,7 @@ ERRORTYPE initVi(mpp_camera_para_conf *pContext, VI_DEV videv, VI_CHN vichn){
         }
     } else {
         pContext->mfsyncThreadId = 0;
-        printf("[mpp_dbg] FsyncFrameThread disabled by MPP_DBG_DISABLE_FSYNC\n");
+        printf("[mpp_cfg] FsyncFrameThread disabled\n");
     }
     return 0;    
 }
@@ -2498,13 +2531,18 @@ ERRORTYPE recording(mpp_camera_para_conf *pContext){
     int prepared_ok = 0;
     int started_ok = 0;
 
-    ret = createAIChn(pContext, 0, 0);
-    if (ret != SUCCESS) goto fail;
-    ai_ok = 1;
+    if (g_rec_audio_enable) {
+        ret = createAIChn(pContext, 0, 0);
+        if (ret != SUCCESS) goto fail;
+        ai_ok = 1;
 
-    ret = createAencChn(pContext);
-    if (ret != SUCCESS) goto fail;
-    aenc_ok = 1;
+        ret = createAencChn(pContext);
+        if (ret != SUCCESS) goto fail;
+        aenc_ok = 1;
+    } else {
+        pContext->m_ai.mAIChnId = MM_INVALID_CHN;
+        pContext->m_aenc.mAEncChnId = MM_INVALID_CHN;
+    }
 
     ret = createVencChn(pContext);
     if (ret != SUCCESS) goto fail;
@@ -2598,7 +2636,7 @@ static void cleanup_recording_partial(mpp_camera_para_conf *pContext, int ai_ok,
         MPP_CHN_S ve_chn = {MOD_ID_VENC, 0, pContext->m_venc.mVEncChn};
         AW_MPI_SYS_UnBind(&ve_chn, &mux_chn);
     }
-    if (prepared_ok && ai_ok && aenc_ok && mux_ok) {
+    if (g_rec_audio_enable && prepared_ok && ai_ok && aenc_ok && mux_ok) {
         MPP_CHN_S mux_chn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
         AW_MPI_SYS_UnBind(&pContext->m_aenc.mAEncChn, &mux_chn);
         AW_MPI_AI_DisableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
@@ -2618,10 +2656,10 @@ static void cleanup_recording_partial(mpp_camera_para_conf *pContext, int ai_ok,
     if (venc_ok && pContext->m_venc.mVEncChn >= 0) {
         AW_MPI_VENC_DestroyChn(pContext->m_venc.mVEncChn);
     }
-    if (aenc_ok && pContext->m_aenc.mAEncChnId >= 0) {
+    if (g_rec_audio_enable && aenc_ok && pContext->m_aenc.mAEncChnId >= 0) {
         AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId);
     }
-    if (ai_ok && pContext->m_ai.mAIChnId >= 0) {
+    if (g_rec_audio_enable && ai_ok && pContext->m_ai.mAIChnId >= 0) {
         AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
     }
 }
