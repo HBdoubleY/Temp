@@ -18,6 +18,7 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <sys/syscall.h>
 #include "vo/hwdisplay.h"
 #include "lvgl_main.h"
 #include "g2d_driver.h"
@@ -89,12 +90,83 @@ static int g_enable_fsync = 0;
 static int g_dbg_switches_inited = 0;
 static volatile int g_mpp_storage_fault = 0;
 static long long g_last_storage_fault_log_ms = 0;
+static int g_cp_perf_enable = -1;
+static int g_cp_perf_warn_us = 20000;
+
+typedef struct {
+    long long win_start_us;
+    unsigned int vi_cnt;
+    unsigned int vi_fail;
+    unsigned long long vi_wait_us;
+    unsigned int venc_cnt;
+    unsigned int venc_fail;
+    unsigned long long venc_cost_us;
+    unsigned int fsync_cnt;
+    unsigned int fsync_fail;
+    unsigned long long fsync_cost_us;
+} mpp_cp_perf_stat_t;
 
 static long long monotonic_ms_now(void)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
+}
+
+static long long monotonic_us_now(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
+}
+
+static long long thread_tid_now(void)
+{
+    return (long long)syscall(SYS_gettid);
+}
+
+static void cp_perf_init_once(void)
+{
+    if (g_cp_perf_enable >= 0) {
+        return;
+    }
+    g_cp_perf_enable = (getenv("CP_PERF_ENABLE") != NULL) ? 1 : 0;
+    const char *warn_us = getenv("CP_PERF_WARN_US");
+    if (warn_us && warn_us[0] != '\0') {
+        int v = atoi(warn_us);
+        if (v > 0) {
+            g_cp_perf_warn_us = v;
+        }
+    }
+}
+
+#define MPP_CP_LOG(stage, fmt, ...) \
+    do { \
+        cp_perf_init_once(); \
+        if (g_cp_perf_enable) { \
+            printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=0 " fmt "\n", \
+                   monotonic_us_now(), thread_tid_now(), stage, ##__VA_ARGS__); \
+        } \
+    } while (0)
+
+static void mpp_cp_stat_flush(const char *stage, mpp_cp_perf_stat_t *s)
+{
+    long long now = monotonic_us_now();
+    if (s->win_start_us == 0) {
+        s->win_start_us = now;
+        return;
+    }
+    if (now - s->win_start_us < 1000000LL) {
+        return;
+    }
+    MPP_CP_LOG(stage,
+               "win_us=%lld vi_cnt=%u vi_fail=%u vi_avg_wait_us=%llu venc_cnt=%u venc_fail=%u venc_avg_cost_us=%llu fsync_cnt=%u fsync_fail=%u fsync_avg_cost_us=%llu",
+               now - s->win_start_us,
+               s->vi_cnt, s->vi_fail, s->vi_cnt ? (s->vi_wait_us / s->vi_cnt) : 0ULL,
+               s->venc_cnt, s->venc_fail, s->venc_cnt ? (s->venc_cost_us / s->venc_cnt) : 0ULL,
+               s->fsync_cnt, s->fsync_fail, s->fsync_cnt ? (s->fsync_cost_us / s->fsync_cnt) : 0ULL);
+    memset(s, 0, sizeof(*s));
+    s->win_start_us = now;
 }
 
 static void mpp_camera_set_storage_fault(const char *reason)
@@ -335,6 +407,8 @@ static void *Vi2VencFrameThread(void *pThreadData)
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
 
     int ret = 0;
+    mpp_cp_perf_stat_t stat;
+    memset(&stat, 0, sizeof(stat));
     
     // 1. 创建双缓冲避免竞争
 
@@ -363,9 +437,17 @@ static void *Vi2VencFrameThread(void *pThreadData)
         }
 #endif  
 
+            long long venc_t0 = monotonic_us_now();
             ret = AW_MPI_VENC_SendFrame(pContext->m_venc.mVEncChn, FrameInfo, 0);
+            long long venc_cost = monotonic_us_now() - venc_t0;
+            stat.venc_cnt++;
+            stat.venc_cost_us += (unsigned long long)venc_cost;
+            if (venc_cost > g_cp_perf_warn_us) {
+                MPP_CP_LOG("mpp_venc_warn", "cost_us=%lld ret=%d", venc_cost, ret);
+            }
             if (ret < 0)
             {
+                stat.venc_fail++;
                 printf("fatal error, venc send frame sync failed!\n");
             }
             
@@ -373,6 +455,7 @@ static void *Vi2VencFrameThread(void *pThreadData)
         } else {
             usleep(1000000); // 1000ms
         }
+        mpp_cp_stat_flush("mpp_venc_thread", &stat);
         
     }
     
@@ -389,6 +472,8 @@ static void *FsyncFrameThread(void *pThreadData)
 {
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
     int sleep_us = g_dbg_fsync_interval_ms * 1000;
+    mpp_cp_perf_stat_t stat;
+    memset(&stat, 0, sizeof(stat));
     while (pContext->mExitFlag == 0)
     {    
         
@@ -397,7 +482,16 @@ static void *FsyncFrameThread(void *pThreadData)
             int fd = pContext->m_mux.fsyncFd;
             pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
             if (fd >= 0) {
-                if (fsync(fd) != 0) {
+                long long t0 = monotonic_us_now();
+                int fs_ret = fsync(fd);
+                long long cost = monotonic_us_now() - t0;
+                stat.fsync_cnt++;
+                stat.fsync_cost_us += (unsigned long long)cost;
+                if (cost > g_cp_perf_warn_us) {
+                    MPP_CP_LOG("mpp_fsync_warn", "fd=%d cost_us=%lld ret=%d", fd, cost, fs_ret);
+                }
+                if (fs_ret != 0) {
+                    stat.fsync_fail++;
                     mpp_camera_set_storage_fault("fsync failed");
                 }
             }
@@ -405,6 +499,7 @@ static void *FsyncFrameThread(void *pThreadData)
         }else{
             sleep(1);
         }
+        mpp_cp_stat_flush("mpp_fsync_thread", &stat);
     }
     return NULL;
 }
@@ -415,6 +510,8 @@ static void *GetCSIFrameThread(void *pThreadData)
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
     mpp_debug_switches_init_once();
     int ret = 0;
+    mpp_cp_perf_stat_t stat;
+    memset(&stat, 0, sizeof(stat));
     VIDEO_FRAME_INFO_S stFrameInfo;
     VENC_JPEG_THUMB_BUFFER_S mJpegThumbBuf;
     pContext->m_vo.mppQueue = queue_mpp_create();
@@ -543,11 +640,15 @@ static void *GetCSIFrameThread(void *pThreadData)
     while (pContext->mExitFlag == 0)
     {      
  
+        long long vi_t0 = monotonic_us_now();
         if ((ret = AW_MPI_VI_GetFrame(pContext->m_vi.mViDev, pContext->m_vi.mViChn, &stFrameInfo, 500)) < 0)
         {
+            stat.vi_fail++;
             printf("fatal error, vi get frame failed!\n");
             continue;
         }
+        stat.vi_cnt++;
+        stat.vi_wait_us += (unsigned long long)(monotonic_us_now() - vi_t0);
 
         // printf("stFrameInfo.VFrame.mOffsetBottom:%d,stFrameInfo.VFrame.mOffsetTop:%d,stFrameInfo.VFrame.mOffsetLeft:%d,stFrameInfo.VFrame.mOffsetRight:%d",stFrameInfo.VFrame.mOffsetBottom,stFrameInfo.VFrame.mOffsetTop,stFrameInfo.VFrame.mOffsetLeft,stFrameInfo.VFrame.mOffsetRight);
         if (pContext->mVoFlag) {
@@ -586,6 +687,7 @@ static void *GetCSIFrameThread(void *pThreadData)
         {
             printf("fatal error, vi release frame failed!\n");
         }
+        mpp_cp_stat_flush("mpp_vi_thread", &stat);
     }
 mem_err:
     // 正确释放内存

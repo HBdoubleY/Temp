@@ -36,6 +36,13 @@ void zlink_client_set_video_dump(int enable);
 
 void carplay_is_running2(void);
 
+/* Perf tracing helpers shared across CarPlay modules. */
+void zlink_client_perf_set_session_id(unsigned int session_id);
+unsigned int zlink_client_perf_get_session_id(void);
+int zlink_client_perf_is_enabled(void);
+int zlink_client_perf_sample_n(void);
+int zlink_client_perf_warn_us(void);
+
 #endif /* ENABLE_CARPLAY */
 
 #ifdef __cplusplus

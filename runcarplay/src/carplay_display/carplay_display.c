@@ -10,8 +10,15 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/syscall.h>
 #include <g2d_driver.h>
 #include <PIXEL_FORMAT_E_g2d_format_convert.h>
+
+extern unsigned int zlink_client_perf_get_session_id(void);
+extern int zlink_client_perf_is_enabled(void);
+extern int zlink_client_perf_sample_n(void);
+extern int zlink_client_perf_warn_us(void);
 
 extern int libzlink_touch_event(int x, int y, int is_touch_down);
 
@@ -98,6 +105,32 @@ static struct {
 	int g2d_dst_in_use[3];
 	volatile int got_idr;
 } g_ctx;
+static unsigned long long g_h264_seq = 0;
+static unsigned long long g_decode_seq = 0;
+static unsigned long long g_frame_seq = 0;
+static unsigned long long g_queue_drop = 0;
+static unsigned long long g_fq_drop = 0;
+static long long g_last_vo_release_us = 0;
+
+static long long cp_now_us(void)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
+}
+
+static long long cp_tid(void)
+{
+	return (long long)syscall(SYS_gettid);
+}
+
+#define CPD_LOG(stage, fmt, ...) \
+	do { \
+		if (zlink_client_perf_is_enabled()) { \
+			printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=%u " fmt "\n", \
+			       cp_now_us(), cp_tid(), stage, zlink_client_perf_get_session_id(), ##__VA_ARGS__); \
+		} \
+	} while (0)
 
 #define VO_LAYER_DEFAULT  0
 #define VO_CHN_DEFAULT     0
@@ -139,10 +172,14 @@ static void queue_destroy(void)
 
 static int queue_push(const char *data, int len)
 {
+	long long t0 = cp_now_us();
 	if (len <= 0 || len > H264_PACKET_MAX)
 		return -1;
 	pthread_mutex_lock(&g_queue.mutex);
 	if (g_queue.count >= H264_QUEUE_CAP) {
+		g_queue_drop++;
+		CPD_LOG("h264_queue_drop", "seq=%llu q_count=%d len=%d total_drop=%llu",
+		        g_h264_seq, g_queue.count, len, g_queue_drop);
 		pthread_mutex_unlock(&g_queue.mutex);
 		return -1;
 	}
@@ -156,6 +193,11 @@ static int queue_push(const char *data, int len)
 	g_queue.slot[g_queue.tail].len  = len;
 	g_queue.tail = (g_queue.tail + 1) % H264_QUEUE_CAP;
 	g_queue.count++;
+	g_h264_seq++;
+	if ((g_h264_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		CPD_LOG("h264_queue_push", "seq=%llu q_count=%d len=%d cost_us=%lld",
+		        g_h264_seq, g_queue.count, len, cp_now_us() - t0);
+	}
 	pthread_cond_signal(&g_queue.cond);
 	pthread_mutex_unlock(&g_queue.mutex);
 	return 0;
@@ -163,6 +205,7 @@ static int queue_push(const char *data, int len)
 
 static int queue_pop(h264_packet_t *out)
 {
+	long long wait_start = cp_now_us();
 	pthread_mutex_lock(&g_queue.mutex);
 	while (g_queue.count == 0 && !g_queue.shutdown)
 		pthread_cond_wait(&g_queue.cond, &g_queue.mutex);
@@ -174,6 +217,10 @@ static int queue_pop(h264_packet_t *out)
 	g_queue.slot[g_queue.head].data = NULL;
 	g_queue.head = (g_queue.head + 1) % H264_QUEUE_CAP;
 	g_queue.count--;
+	if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		CPD_LOG("h264_queue_pop", "q_count=%d wait_us=%lld",
+		        g_queue.count, cp_now_us() - wait_start);
+	}
 	pthread_mutex_unlock(&g_queue.mutex);
 	return 0;
 }
@@ -342,6 +389,7 @@ static void *decode_thread_fn(void *arg)
 		h264_packet_t pkt;
 		if (queue_pop(&pkt) != 0)
 			break;
+		g_decode_seq++;
 		if (pkt.len > (int)g_ctx.stream_buf_size) {
 			free(pkt.data);
 			continue;
@@ -374,14 +422,26 @@ static void *decode_thread_fn(void *arg)
 		stream.mLen = (unsigned int)pkt.len;
 		stream.mbEndOfFrame = TRUE;
 
-		if (AW_MPI_VDEC_SendStream(g_ctx.vdec_chn, &stream, 200) != SUCCESS)
+		long long send_t0 = cp_now_us();
+		ERRORTYPE send_ret = AW_MPI_VDEC_SendStream(g_ctx.vdec_chn, &stream, 200);
+		long long send_cost = cp_now_us() - send_t0;
+		if (send_ret != SUCCESS) {
+			CPD_LOG("decode_send_fail", "seq=%llu len=%d ret=%d cost_us=%lld",
+			        g_decode_seq, pkt.len, send_ret, send_cost);
 			continue;
+		}
+		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+			CPD_LOG("decode_send", "seq=%llu len=%d cost_us=%lld",
+			        g_decode_seq, pkt.len, send_cost);
+		}
 
 
+		int frame_cnt = 0;
 		for (;;) {
 			ERRORTYPE ret = AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 0);
 			if (ret != SUCCESS)
 				break;
+			frame_cnt++;
 
 			pthread_mutex_lock(&g_fq.mutex);
 			if (g_fq.count >= FRAME_QUEUE_CAP) {
@@ -389,10 +449,12 @@ static void *decode_thread_fn(void *arg)
 				g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 				g_fq.count--;
 				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+				g_fq_drop++;
 			}
 			g_fq.slot[g_fq.tail] = frame;
 			g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
 			g_fq.count++;
+			g_frame_seq++;
 			pthread_cond_signal(&g_fq.cond);
 			pthread_mutex_unlock(&g_fq.mutex);
 		}
@@ -404,12 +466,19 @@ static void *decode_thread_fn(void *arg)
 				g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 				g_fq.count--;
 				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+				g_fq_drop++;
 			}
 			g_fq.slot[g_fq.tail] = frame;
 			g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
 			g_fq.count++;
+			g_frame_seq++;
+			frame_cnt++;
 			pthread_cond_signal(&g_fq.cond);
 			pthread_mutex_unlock(&g_fq.mutex);
+		}
+		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+			CPD_LOG("decode_get_image", "seq=%llu frames=%d fq_drop=%llu",
+			        g_decode_seq, frame_cnt, g_fq_drop);
 		}
 	}
 
@@ -427,6 +496,7 @@ static void *display_thread_fn(void *arg)
 		int got = 0;
 
 		pthread_mutex_lock(&g_fq.mutex);
+		long long fq_wait_start = cp_now_us();
 		while (g_fq.count == 0 && !g_fq.shutdown)
 			pthread_cond_wait(&g_fq.cond, &g_fq.mutex);
 
@@ -445,6 +515,7 @@ static void *display_thread_fn(void *arg)
 		g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 		g_fq.count--;
 		got = 1;
+		long long fq_wait_us = cp_now_us() - fq_wait_start;
 		pthread_mutex_unlock(&g_fq.mutex);
 
 		if (!got)
@@ -468,6 +539,7 @@ static void *display_thread_fn(void *arg)
 		int cur_buf = g_ctx.g2d_buf_idx;
 
 		pthread_mutex_lock(&g_ctx.g2d_use_mutex);
+		long long g2d_wait_start = cp_now_us();
 		while (g_ctx.running && g_ctx.g2d_dst_in_use[cur_buf]) {
 			pthread_cond_wait(&g_ctx.g2d_use_cond, &g_ctx.g2d_use_mutex);
 		}
@@ -477,9 +549,13 @@ static void *display_thread_fn(void *arg)
 		}
 		g_ctx.g2d_dst_in_use[cur_buf] = 1;
 		pthread_mutex_unlock(&g_ctx.g2d_use_mutex);
+		long long g2d_wait_us = cp_now_us() - g2d_wait_start;
 
 		VIDEO_FRAME_INFO_S *dst = &g_ctx.g2d_dst[cur_buf];
+		long long g2d_t0 = cp_now_us();
 		int g2d_ret = g2d_rotate_frame(&frame, dst);
+		long long g2d_cost = cp_now_us() - g2d_t0;
+		long long vo_t0 = cp_now_us();
 		if (g2d_ret == 0) {
 			AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, dst, 0);
 			g_ctx.g2d_buf_idx = (cur_buf + 1) % 3;
@@ -492,6 +568,11 @@ static void *display_thread_fn(void *arg)
 
 			AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
 		}
+		long long vo_cost = cp_now_us() - vo_t0;
+		if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+			CPD_LOG("display_frame", "fq_wait_us=%lld g2d_wait_us=%lld g2d_cost_us=%lld vo_cost_us=%lld g2d_ret=%d",
+			        fq_wait_us, g2d_wait_us, g2d_cost, vo_cost, g2d_ret);
+		}
 		AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &frame);
 	}
 	return NULL;
@@ -503,6 +584,7 @@ static void *display_thread_fn(void *arg)
 static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 {
 	int session_width, session_height;
+	long long t0 = cp_now_us();
 
 	pthread_mutex_lock(&g_ctx.rect_mutex);
 	session_width  = g_ctx.session_width;
@@ -523,6 +605,10 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 	if (session_y >= session_height) session_y = session_height - 1;
 
 	libzlink_touch_event(session_x, session_y, is_touch_down);
+	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		CPD_LOG("touch_map_send", "sx=%d sy=%d tx=%d ty=%d down=%d cost_us=%lld",
+		        screen_x, screen_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
+	}
 }
 
 static ERRORTYPE carplay_vo_callback(void *cookie, MPP_CHN_S *pChn, MPP_EVENT_TYPE event, void *pEventData)
@@ -530,6 +616,14 @@ static ERRORTYPE carplay_vo_callback(void *cookie, MPP_CHN_S *pChn, MPP_EVENT_TY
 	(void)cookie; (void)pChn;
 
 	if (event == MPP_EVENT_RELEASE_VIDEO_BUFFER) {
+		long long now_us = cp_now_us();
+		if (g_last_vo_release_us > 0) {
+			long long delta = now_us - g_last_vo_release_us;
+			if (delta > (long long)zlink_client_perf_warn_us()) {
+				CPD_LOG("vo_release_slow", "interval_us=%lld", delta);
+			}
+		}
+		g_last_vo_release_us = now_us;
 		VIDEO_FRAME_INFO_S *released = (VIDEO_FRAME_INFO_S *)pEventData;
 		if (released) {
 			pthread_mutex_lock(&g_ctx.g2d_use_mutex);
@@ -553,6 +647,7 @@ static ERRORTYPE carplay_vo_callback(void *cookie, MPP_CHN_S *pChn, MPP_EVENT_TY
 int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_height,
                            int session_width, int session_height)
 {
+	long long create_t0 = cp_now_us();
 	ERRORTYPE ret;
 	VDEC_CHN_ATTR_S vdec_attr;
 	VO_PUB_ATTR_S vo_pub;
@@ -682,6 +777,9 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 		goto err_cleanup;
 	}
 	display_thread_started = 1;
+	CPD_LOG("display_create_done", "disp=%dx%d session=%dx%d cost_us=%lld",
+	        g_ctx.disp_width, g_ctx.disp_height, g_ctx.session_width, g_ctx.session_height,
+	        cp_now_us() - create_t0);
 	return 0;
 
 err_cleanup:
@@ -798,7 +896,12 @@ void carplay_touch_send(void)
 
 void carplay_touch_send_xy(int screen_x, int screen_y, int is_touch_down)
 {
+	long long t0 = cp_now_us();
 	touch_apply_and_send(screen_x, screen_y, is_touch_down);
+	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		CPD_LOG("touch_send_xy", "x=%d y=%d down=%d cost_us=%lld",
+		        screen_x, screen_y, is_touch_down, cp_now_us() - t0);
+	}
 }
 
 #endif /* ENABLE_CARPLAY */

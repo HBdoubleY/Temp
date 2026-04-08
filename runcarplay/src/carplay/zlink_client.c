@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdint.h>
+#include <sys/syscall.h>
 
 #define LINK_TYPE_CARPLAY       2
 #define LINK_TYPE_ANDROIDAUTO   3
@@ -22,7 +24,7 @@
 extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
-static int g_session_fps = 20;
+static int g_session_fps = 30;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
@@ -55,6 +57,56 @@ static struct {
 
 static int g_last_focus_req = -1;
 static long long g_last_focus_req_ms = 0;
+static unsigned int g_perf_session_id = 0;
+static int g_perf_enable = -1;
+static int g_perf_deep = -1;
+static int g_perf_sample_n = -1;
+static int g_perf_warn_us = -1;
+
+static long long zlink_now_us(void)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
+}
+
+static long long zlink_tid(void)
+{
+	return (long long)syscall(SYS_gettid);
+}
+
+static int zlink_env_int(const char *key, int def)
+{
+	const char *s = getenv(key);
+	if (!s || s[0] == '\0')
+		return def;
+	return atoi(s);
+}
+
+static void zlink_perf_init_once(void)
+{
+	if (g_perf_enable >= 0)
+		return;
+	g_perf_enable = zlink_env_int("CP_PERF_ENABLE", 0) ? 1 : 0;
+	g_perf_deep = zlink_env_int("CP_PERF_DEEP", 0) ? 1 : 0;
+	g_perf_sample_n = zlink_env_int("CP_PERF_SAMPLE_N", 1);
+	if (g_perf_sample_n <= 0)
+		g_perf_sample_n = 1;
+	g_perf_warn_us = zlink_env_int("CP_PERF_WARN_US", 20000);
+	if (g_perf_warn_us <= 0)
+		g_perf_warn_us = 20000;
+	printf("[cp_perf] cfg enable=%d deep=%d sample_n=%d warn_us=%d\n",
+	       g_perf_enable, g_perf_deep, g_perf_sample_n, g_perf_warn_us);
+}
+
+#define CP_PERF_LOG(stage, fmt, ...) \
+	do { \
+		zlink_perf_init_once(); \
+		if (g_perf_enable && g_perf_deep) { \
+			printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=%u " fmt "\n", \
+			       zlink_now_us(), zlink_tid(), stage, g_perf_session_id, ##__VA_ARGS__); \
+		} \
+	} while (0)
 
 static long long zlink_now_ms(void)
 {
@@ -172,15 +224,30 @@ static void session_init(void)
 
 static int video_data_cb(char *data, int len, struct VIDEO_SCREEN_INFO *info, void *user_data)
 {
+	static unsigned long long pkt_seq = 0;
+	static unsigned long long window_pkt = 0;
+	static unsigned long long window_bytes = 0;
+	static unsigned long long window_feed_fail = 0;
+	static long long window_start_us = 0;
+	long long cb_start_us = zlink_now_us();
+	unsigned long long my_seq;
 	(void)info;
 	(void)user_data;
 	if (data && len > 0) {
+		int prebuf_count = 0;
+		int feed_ret = 0;
+		int active = 0;
+		my_seq = ++pkt_seq;
 		pthread_mutex_lock(&g_video_state.mutex);
 		prebuf_push_locked(data, len);
-		int active = g_video_state.active;
+		prebuf_count = g_video_state.count;
+		active = g_video_state.active;
 		pthread_mutex_unlock(&g_video_state.mutex);
-		if (active)
-			carplay_display_feed_h264(data, len);
+		if (active) {
+			feed_ret = carplay_display_feed_h264(data, len);
+			if (feed_ret != 0)
+				window_feed_fail++;
+		}
 
 		pthread_mutex_lock(&g_video_dump.mutex);
 		if (g_video_dump.enabled && g_video_dump.fp) {
@@ -189,6 +256,30 @@ static int video_data_cb(char *data, int len, struct VIDEO_SCREEN_INFO *info, vo
 			fflush(g_video_dump.fp);
 		}
 		pthread_mutex_unlock(&g_video_dump.mutex);
+
+		window_pkt++;
+		window_bytes += (unsigned long long)len;
+		if (window_start_us == 0)
+			window_start_us = cb_start_us;
+		if ((my_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+			long long cb_cost_us = zlink_now_us() - cb_start_us;
+			CP_PERF_LOG("video_data_cb",
+			            "pkt_seq=%llu len=%d active=%d prebuf_count=%d feed_ret=%d cb_cost_us=%lld",
+			            my_seq, len, active, prebuf_count, feed_ret, cb_cost_us);
+		}
+		if (window_pkt >= 100) {
+			long long now_us = zlink_now_us();
+			long long dur_us = now_us - window_start_us;
+			unsigned long long pps = (dur_us > 0) ? (window_pkt * 1000000ULL) / (unsigned long long)dur_us : 0ULL;
+			unsigned long long avg_len = (window_pkt > 0) ? (window_bytes / window_pkt) : 0ULL;
+			CP_PERF_LOG("video_data_cb_window",
+			            "pkts=%llu pps=%llu avg_len=%llu feed_fail=%llu window_us=%lld",
+			            window_pkt, pps, avg_len, window_feed_fail, dur_us);
+			window_pkt = 0;
+			window_bytes = 0;
+			window_feed_fail = 0;
+			window_start_us = now_us;
+		}
 	}
 	return 0;
 }
@@ -262,6 +353,7 @@ static int video_focus_cb(int is_hu_focus_on, void *user_data)
 	}
 	g_last_focus_req = is_hu_focus_on;
 	g_last_focus_req_ms = now;
+	CP_PERF_LOG("video_focus_cb", "focus=%d", is_hu_focus_on);
 
 	if (is_hu_focus_on) {
 		int was_active = 0;
@@ -361,21 +453,37 @@ void zlink_client_run(void)
 
 void zlink_client_set_video_active(int active)
 {
+	long long t0 = zlink_now_us();
+	int replayed = 0;
 	pthread_mutex_lock(&g_video_state.mutex);
 	if (active) {
 		g_video_state.active = 1;
-		for (int i = 0; i < g_video_state.count; i++)
+		for (int i = 0; i < g_video_state.count; i++) {
 			carplay_display_feed_h264(g_video_state.slot[i].data, g_video_state.slot[i].len);
+			replayed++;
+		}
 	} else {
 		g_video_state.active = 0;
 		prebuf_clear_locked();
 	}
 	pthread_mutex_unlock(&g_video_state.mutex);
+	CP_PERF_LOG("set_video_active", "active=%d replayed=%d cost_us=%lld",
+	            active, replayed, zlink_now_us() - t0);
 }
 
 int zlink_client_request_video_focus(int is_hu_focus_on)
 {
-	return libzlink_video_focus(is_hu_focus_on ? 1 : 0);
+	long long t0 = zlink_now_us();
+	int ret = libzlink_video_focus(is_hu_focus_on ? 1 : 0);
+	long long cost = zlink_now_us() - t0;
+	if (cost > (long long)zlink_client_perf_warn_us()) {
+		CP_PERF_LOG("request_video_focus_slow", "focus=%d ret=%d cost_us=%lld",
+		            is_hu_focus_on, ret, cost);
+	} else {
+		CP_PERF_LOG("request_video_focus", "focus=%d ret=%d cost_us=%lld",
+		            is_hu_focus_on, ret, cost);
+	}
+	return ret;
 }
 
 int zlink_client_take_pending_home_request(void)
@@ -442,6 +550,34 @@ void zlink_client_reset_video_prebuffer(void)
 void carplay_is_running2(void)
 {
 	libzlink_request_state();
+}
+
+void zlink_client_perf_set_session_id(unsigned int session_id)
+{
+	g_perf_session_id = session_id;
+}
+
+unsigned int zlink_client_perf_get_session_id(void)
+{
+	return g_perf_session_id;
+}
+
+int zlink_client_perf_is_enabled(void)
+{
+	zlink_perf_init_once();
+	return g_perf_enable;
+}
+
+int zlink_client_perf_sample_n(void)
+{
+	zlink_perf_init_once();
+	return g_perf_sample_n;
+}
+
+int zlink_client_perf_warn_us(void)
+{
+	zlink_perf_init_once();
+	return g_perf_warn_us;
 }
 
 #endif /* ENABLE_CARPLAY */
