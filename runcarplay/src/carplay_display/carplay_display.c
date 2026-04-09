@@ -59,7 +59,8 @@ static struct {
 	volatile int shutdown;
 } g_queue;
 
-#define FRAME_QUEUE_CAP 4
+#define FRAME_QUEUE_CAP 8
+#define CPD_PERF_PERIOD_US (3 * 1000000LL)
 
 static struct {
 	VIDEO_FRAME_INFO_S slot[FRAME_QUEUE_CAP];
@@ -123,7 +124,23 @@ static unsigned long long g_queue_evict_total = 0;
 static unsigned long long g_queue_evict_key = 0;
 static unsigned long long g_queue_push_nomem = 0;
 static unsigned long long g_fq_drop = 0;
+static unsigned long long g_disp_fq_skip = 0;
 static long long g_last_vo_release_us = 0;
+
+static struct {
+	long long last_print_us;
+	unsigned long long dec_in;
+	unsigned long long dec_out;
+	unsigned long long disp;
+	unsigned long long fq_drop;
+	unsigned long long h264_evict;
+	unsigned long long h264_drop;
+	unsigned long long send_fail;
+	unsigned long long g2d_total_us;
+	unsigned long long vo_total_us;
+	unsigned long long disp_fq_skip;
+	unsigned long long send_total_us;
+} g_pstat;
 
 static long long cp_now_us(void)
 {
@@ -135,6 +152,29 @@ static long long cp_now_us(void)
 static long long cp_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
+}
+
+static void cpd_perf_maybe_print(void)
+{
+	long long now = cp_now_us();
+	if (g_pstat.last_print_us == 0) {
+		g_pstat.last_print_us = now;
+		return;
+	}
+	long long elapsed = now - g_pstat.last_print_us;
+	if (elapsed < CPD_PERF_PERIOD_US)
+		return;
+	unsigned long long g2d_avg = g_pstat.disp > 0 ? g_pstat.g2d_total_us / g_pstat.disp : 0;
+	unsigned long long vo_avg = g_pstat.disp > 0 ? g_pstat.vo_total_us / g_pstat.disp : 0;
+	unsigned long long send_avg = g_pstat.dec_in > 0 ? g_pstat.send_total_us / g_pstat.dec_in : 0;
+	printf("[carplay_perf] period=%lldms dec_in=%llu dec_out=%llu disp=%llu fq_drop=%llu fq_skip=%llu h264_evict=%llu h264_drop=%llu send_fail=%llu send_avg_us=%llu g2d_avg_us=%llu vo_avg_us=%llu\n",
+	       elapsed / 1000LL,
+	       g_pstat.dec_in, g_pstat.dec_out, g_pstat.disp,
+	       g_pstat.fq_drop, g_pstat.disp_fq_skip,
+	       g_pstat.h264_evict, g_pstat.h264_drop, g_pstat.send_fail,
+	       send_avg, g2d_avg, vo_avg);
+	memset(&g_pstat, 0, sizeof(g_pstat));
+	g_pstat.last_print_us = now;
 }
 
 static int cpd_env_int(const char *key, int def)
@@ -326,12 +366,15 @@ static int queue_evict_old_packets_locked(int target_free, h264_nal_kind_t incom
 	g_queue.tail = kept_count % H264_QUEUE_CAP;
 	g_queue_evict_total += (unsigned long long)evicted;
 	g_queue_evict_key += (unsigned long long)evicted_key;
+	g_pstat.h264_evict += (unsigned long long)evicted;
 
-	printf("[carplay_display] h264_queue_evict total=%d key=%d depth=%d incoming_kind=%s incoming_len=%d total_evicted=%llu total_key_evicted=%llu\n",
-	       evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind), incoming_len,
-	       g_queue_evict_total, g_queue_evict_key);
-	CPD_LOG("h264_queue_evict", "evicted=%d key=%d depth=%d incoming_kind=%s incoming_len=%d total_evicted=%llu total_key=%llu",
-	        evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind), incoming_len,
+	if (evicted_key > 0) {
+		g_ctx.got_idr = 0;
+		printf("[carplay_display] h264_evict_key_warn evicted=%d key=%d depth=%d incoming=%s total_key=%llu\n",
+		       evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind), g_queue_evict_key);
+	}
+	CPD_LOG("h264_queue_evict", "evicted=%d key=%d depth=%d incoming_kind=%s total_evicted=%llu total_key=%llu",
+	        evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind),
 	        g_queue_evict_total, g_queue_evict_key);
 	return evicted;
 }
@@ -349,8 +392,7 @@ static int queue_push(const char *data, int len)
 		queue_evict_old_packets_locked(H264_QUEUE_EVICT_BATCH, kind, len);
 		if (g_queue.count >= H264_QUEUE_CAP) {
 			g_queue_drop++;
-			printf("[carplay_display] h264_queue_drop seq=%llu q_count=%d len=%d kind=%s total_drop=%llu\n",
-			       g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), g_queue_drop);
+			g_pstat.h264_drop++;
 			CPD_LOG("h264_queue_drop", "seq=%llu q_count=%d len=%d kind=%s total_drop=%llu",
 			        g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), g_queue_drop);
 			pthread_mutex_unlock(&g_queue.mutex);
@@ -361,8 +403,7 @@ static int queue_push(const char *data, int len)
 	if (!copy) {
 		g_queue_push_nomem++;
 		g_queue_drop++;
-		printf("[carplay_display] h264_queue_nomem len=%d kind=%s total_nomem=%llu total_drop=%llu\n",
-		       len, h264_nal_kind_str(kind), g_queue_push_nomem, g_queue_drop);
+		g_pstat.h264_drop++;
 		pthread_mutex_unlock(&g_queue.mutex);
 		return -1;
 	}
@@ -601,10 +642,14 @@ static void *decode_thread_fn(void *arg)
 		stream.mLen = (unsigned int)pkt.len;
 		stream.mbEndOfFrame = TRUE;
 
+		g_pstat.dec_in++;
+
 		long long send_t0 = cp_now_us();
-		ERRORTYPE send_ret = AW_MPI_VDEC_SendStream(g_ctx.vdec_chn, &stream, 200);
+		ERRORTYPE send_ret = AW_MPI_VDEC_SendStream(g_ctx.vdec_chn, &stream, 20);
 		long long send_cost = cp_now_us() - send_t0;
+		g_pstat.send_total_us += (unsigned long long)(send_cost > 0 ? send_cost : 0);
 		if (send_ret != SUCCESS) {
+			g_pstat.send_fail++;
 			CPD_LOG("decode_send_fail", "seq=%llu len=%d ret=%d cost_us=%lld",
 			        g_decode_seq, pkt.len, send_ret, send_cost);
 			continue;
@@ -613,7 +658,6 @@ static void *decode_thread_fn(void *arg)
 			CPD_LOG("decode_send", "seq=%llu len=%d cost_us=%lld",
 			        g_decode_seq, pkt.len, send_cost);
 		}
-
 
 		int frame_cnt = 0;
 		for (;;) {
@@ -629,6 +673,7 @@ static void *decode_thread_fn(void *arg)
 				g_fq.count--;
 				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
 				g_fq_drop++;
+				g_pstat.fq_drop++;
 			}
 			g_fq.slot[g_fq.tail] = frame;
 			g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
@@ -638,23 +683,27 @@ static void *decode_thread_fn(void *arg)
 			pthread_mutex_unlock(&g_fq.mutex);
 		}
 
-		if (AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 30) == SUCCESS) {
-			pthread_mutex_lock(&g_fq.mutex);
-			if (g_fq.count >= FRAME_QUEUE_CAP) {
-				VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
-				g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
-				g_fq.count--;
-				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
-				g_fq_drop++;
+		if (frame_cnt == 0) {
+			if (AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 10) == SUCCESS) {
+				frame_cnt++;
+				pthread_mutex_lock(&g_fq.mutex);
+				if (g_fq.count >= FRAME_QUEUE_CAP) {
+					VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
+					g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
+					g_fq.count--;
+					AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+					g_fq_drop++;
+					g_pstat.fq_drop++;
+				}
+				g_fq.slot[g_fq.tail] = frame;
+				g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
+				g_fq.count++;
+				g_frame_seq++;
+				pthread_cond_signal(&g_fq.cond);
+				pthread_mutex_unlock(&g_fq.mutex);
 			}
-			g_fq.slot[g_fq.tail] = frame;
-			g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
-			g_fq.count++;
-			g_frame_seq++;
-			frame_cnt++;
-			pthread_cond_signal(&g_fq.cond);
-			pthread_mutex_unlock(&g_fq.mutex);
 		}
+		g_pstat.dec_out += (unsigned long long)frame_cnt;
 		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 			CPD_LOG("decode_get_image", "seq=%llu frames=%d fq_drop=%llu",
 			        g_decode_seq, frame_cnt, g_fq_drop);
@@ -689,6 +738,8 @@ static void *display_thread_fn(void *arg)
 			g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 			g_fq.count--;
 			AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+			g_disp_fq_skip++;
+			g_pstat.disp_fq_skip++;
 		}
 		frame = g_fq.slot[g_fq.head];
 		g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
@@ -748,6 +799,10 @@ static void *display_thread_fn(void *arg)
 			AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
 		}
 		long long vo_cost = cp_now_us() - vo_t0;
+		g_pstat.disp++;
+		g_pstat.g2d_total_us += (unsigned long long)(g2d_cost > 0 ? g2d_cost : 0);
+		g_pstat.vo_total_us += (unsigned long long)(vo_cost > 0 ? vo_cost : 0);
+		cpd_perf_maybe_print();
 		if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 			CPD_LOG("display_frame", "fq_wait_us=%lld g2d_wait_us=%lld g2d_cost_us=%lld vo_cost_us=%lld g2d_ret=%d",
 			        fq_wait_us, g2d_wait_us, g2d_cost, vo_cost, g2d_ret);
@@ -912,9 +967,14 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	force_frame_package = cpd_env_int("CP_VDEC_FORCE_FRAME_PACKAGE", 0) ? 1 : 0;
 	session_fps = cpd_guess_session_fps();
 	ve_freq_set = cpd_env_opt_int("CP_VDEC_VE_FREQ", &ve_freq);
+	if (!ve_freq_set) {
+		// ve_freq = 480;
+		ve_freq = 600;
+		ve_freq_set = 1;
+	}
 
-	printf("[carplay_display] vdec_tuning_cfg set_stream_info=%d force_frame_package=%d session_fps=%d ve_freq=%s%d\n",
-	       set_stream_info, force_frame_package, session_fps, ve_freq_set ? "" : "<unset>", ve_freq_set ? ve_freq : 0);
+	printf("[carplay_display] vdec_tuning_cfg set_stream_info=%d force_frame_package=%d session_fps=%d ve_freq=%d\n",
+	       set_stream_info, force_frame_package, session_fps, ve_freq);
 
 	if (set_stream_info) {
 		memset(&stream_info, 0, sizeof(stream_info));
@@ -1010,6 +1070,8 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 		goto err_cleanup;
 	}
 	display_thread_started = 1;
+	memset(&g_pstat, 0, sizeof(g_pstat));
+	g_pstat.last_print_us = cp_now_us();
 	CPD_LOG("display_create_done", "disp=%dx%d session=%dx%d cost_us=%lld",
 	        g_ctx.disp_width, g_ctx.disp_height, g_ctx.session_width, g_ctx.session_height,
 	        cp_now_us() - create_t0);

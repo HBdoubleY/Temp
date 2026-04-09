@@ -85,7 +85,7 @@ static int g_dbg_disable_fsync = 0;
 static int g_dbg_disable_preview_g2d = 0;
 static int g_dbg_fsync_interval_ms = 3000;
 static int g_rec_audio_enable = 0;
-static int g_rec_bitrate = 8 * 1024 * 1024;
+static int g_rec_bitrate = 2 * 1024 * 1024;
 static int g_enable_fsync = 0;
 static int g_dbg_switches_inited = 0;
 static volatile int g_mpp_storage_fault = 0;
@@ -1042,7 +1042,7 @@ static ERRORTYPE InitMppCameraData(mpp_camera_para_conf *pContext){
 static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
     pContext->m_vi.mWidth = 1920;
     pContext->m_vi.mHeight = 1080;
-    pContext->m_vi.mFrameRate = 25;
+    pContext->m_vi.mFrameRate = 20;
     pContext->m_vi.mPixFmt = MM_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
     pContext->m_vi.mColorSpace = V4L2_COLORSPACE_JPEG;
     pContext->m_vi.mViBufferNum = 5;
@@ -1054,7 +1054,7 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
 
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
-    pContext->m_venc.mFrameRate = 25;
+    pContext->m_venc.mFrameRate = 20;
     pContext->m_venc.mBitRate = g_rec_bitrate;
     pContext->m_venc.mRcMode = 0;
     pContext->m_venc.mEncoderFmt = PT_H264;
