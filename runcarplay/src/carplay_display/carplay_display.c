@@ -31,12 +31,22 @@ int carplay_touch_screen_y   = 0;
 int carplay_touch_screen_down = 0;
 int carplay_split_screen_enable = 0;
 int carplay_split_line_x = 720;
-#define H264_QUEUE_CAP      128
+#define H264_QUEUE_CAP      16
+#define H264_QUEUE_EVICT_BATCH 10
 #define H264_PACKET_MAX     (256 * 1024)
+
+typedef enum {
+	H264_NAL_OTHER = 0,
+	H264_NAL_NON_KEY,
+	H264_NAL_IDR,
+	H264_NAL_PPS,
+	H264_NAL_SPS,
+} h264_nal_kind_t;
 
 typedef struct {
 	char *data;
 	int len;
+	h264_nal_kind_t kind;
 } h264_packet_t;
 
 static struct {
@@ -109,6 +119,9 @@ static unsigned long long g_h264_seq = 0;
 static unsigned long long g_decode_seq = 0;
 static unsigned long long g_frame_seq = 0;
 static unsigned long long g_queue_drop = 0;
+static unsigned long long g_queue_evict_total = 0;
+static unsigned long long g_queue_evict_key = 0;
+static unsigned long long g_queue_push_nomem = 0;
 static unsigned long long g_fq_drop = 0;
 static long long g_last_vo_release_us = 0;
 
@@ -122,6 +135,98 @@ static long long cp_now_us(void)
 static long long cp_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
+}
+
+static int cpd_env_int(const char *key, int def)
+{
+	const char *s = getenv(key);
+	if (!s || s[0] == '\0')
+		return def;
+	return atoi(s);
+}
+
+static int cpd_env_opt_int(const char *key, int *out)
+{
+	const char *s = getenv(key);
+	if (!s || s[0] == '\0')
+		return 0;
+	*out = atoi(s);
+	return 1;
+}
+
+static int cpd_guess_session_fps(void)
+{
+	int fps = cpd_env_int("ZLINK_SESSION_FPS", 20);
+	if (fps < 15 || fps > 30)
+		fps = 20;
+	return fps;
+}
+
+static const char *h264_nal_kind_str(h264_nal_kind_t kind)
+{
+	switch (kind) {
+	case H264_NAL_SPS:
+		return "sps";
+	case H264_NAL_PPS:
+		return "pps";
+	case H264_NAL_IDR:
+		return "idr";
+	case H264_NAL_NON_KEY:
+		return "non_key";
+	default:
+		return "other";
+	}
+}
+
+static int h264_nal_is_key_related(h264_nal_kind_t kind)
+{
+	return kind == H264_NAL_SPS || kind == H264_NAL_PPS || kind == H264_NAL_IDR;
+}
+
+static int h264_nal_is_evict_preferred(h264_nal_kind_t kind)
+{
+	return kind == H264_NAL_NON_KEY || kind == H264_NAL_OTHER;
+}
+
+static h264_nal_kind_t h264_classify_packet(const char *data, int len)
+{
+	const unsigned char *d = (const unsigned char *)data;
+	h264_nal_kind_t best = H264_NAL_OTHER;
+
+	for (int i = 0; i + 4 < len; i++) {
+		if (d[i] != 0 || d[i + 1] != 0)
+			continue;
+		if (d[i + 2] != 1 && !(d[i + 2] == 0 && d[i + 3] == 1))
+			continue;
+
+		int nal_off = (d[i + 2] == 1) ? i + 3 : i + 4;
+		if (nal_off >= len)
+			continue;
+
+		switch (d[nal_off] & 0x1F) {
+		case 7:
+			return H264_NAL_SPS;
+		case 8:
+			if (best < H264_NAL_PPS)
+				best = H264_NAL_PPS;
+			break;
+		case 5:
+			if (best < H264_NAL_IDR)
+				best = H264_NAL_IDR;
+			break;
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+			if (best < H264_NAL_NON_KEY)
+				best = H264_NAL_NON_KEY;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return best;
 }
 
 #define CPD_LOG(stage, fmt, ...) \
@@ -170,33 +275,107 @@ static void queue_destroy(void)
 	pthread_cond_destroy(&g_queue.cond);
 }
 
+static int queue_evict_old_packets_locked(int target_free, h264_nal_kind_t incoming_kind, int incoming_len)
+{
+	h264_packet_t kept[H264_QUEUE_CAP];
+	unsigned char evict[H264_QUEUE_CAP];
+	int logical_count = g_queue.count;
+	int evicted = 0;
+	int evicted_key = 0;
+	int kept_count = 0;
+
+	if (logical_count <= 0 || target_free <= 0)
+		return 0;
+
+	memset(evict, 0, sizeof(evict));
+
+	for (int i = 0; i < logical_count && evicted < target_free; i++) {
+		int idx = (g_queue.head + i) % H264_QUEUE_CAP;
+		if (h264_nal_is_evict_preferred(g_queue.slot[idx].kind)) {
+			evict[i] = 1;
+			evicted++;
+		}
+	}
+
+	for (int i = 0; i < logical_count && evicted < target_free; i++) {
+		if (evict[i])
+			continue;
+		evict[i] = 1;
+		evicted++;
+	}
+
+	for (int i = 0; i < logical_count; i++) {
+		int idx = (g_queue.head + i) % H264_QUEUE_CAP;
+		h264_packet_t pkt = g_queue.slot[idx];
+
+		if (evict[i]) {
+			if (h264_nal_is_key_related(pkt.kind))
+				evicted_key++;
+			free(pkt.data);
+		} else {
+			kept[kept_count++] = pkt;
+		}
+	}
+
+	memset(g_queue.slot, 0, sizeof(g_queue.slot));
+	for (int i = 0; i < kept_count; i++)
+		g_queue.slot[i] = kept[i];
+
+	g_queue.head = 0;
+	g_queue.count = kept_count;
+	g_queue.tail = kept_count % H264_QUEUE_CAP;
+	g_queue_evict_total += (unsigned long long)evicted;
+	g_queue_evict_key += (unsigned long long)evicted_key;
+
+	printf("[carplay_display] h264_queue_evict total=%d key=%d depth=%d incoming_kind=%s incoming_len=%d total_evicted=%llu total_key_evicted=%llu\n",
+	       evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind), incoming_len,
+	       g_queue_evict_total, g_queue_evict_key);
+	CPD_LOG("h264_queue_evict", "evicted=%d key=%d depth=%d incoming_kind=%s incoming_len=%d total_evicted=%llu total_key=%llu",
+	        evicted, evicted_key, g_queue.count, h264_nal_kind_str(incoming_kind), incoming_len,
+	        g_queue_evict_total, g_queue_evict_key);
+	return evicted;
+}
+
 static int queue_push(const char *data, int len)
 {
 	long long t0 = cp_now_us();
+	h264_nal_kind_t kind;
+
 	if (len <= 0 || len > H264_PACKET_MAX)
 		return -1;
+	kind = h264_classify_packet(data, len);
 	pthread_mutex_lock(&g_queue.mutex);
 	if (g_queue.count >= H264_QUEUE_CAP) {
-		g_queue_drop++;
-		CPD_LOG("h264_queue_drop", "seq=%llu q_count=%d len=%d total_drop=%llu",
-		        g_h264_seq, g_queue.count, len, g_queue_drop);
-		pthread_mutex_unlock(&g_queue.mutex);
-		return -1;
+		queue_evict_old_packets_locked(H264_QUEUE_EVICT_BATCH, kind, len);
+		if (g_queue.count >= H264_QUEUE_CAP) {
+			g_queue_drop++;
+			printf("[carplay_display] h264_queue_drop seq=%llu q_count=%d len=%d kind=%s total_drop=%llu\n",
+			       g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), g_queue_drop);
+			CPD_LOG("h264_queue_drop", "seq=%llu q_count=%d len=%d kind=%s total_drop=%llu",
+			        g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), g_queue_drop);
+			pthread_mutex_unlock(&g_queue.mutex);
+			return -1;
+		}
 	}
 	char *copy = (char *)malloc((size_t)len);
 	if (!copy) {
+		g_queue_push_nomem++;
+		g_queue_drop++;
+		printf("[carplay_display] h264_queue_nomem len=%d kind=%s total_nomem=%llu total_drop=%llu\n",
+		       len, h264_nal_kind_str(kind), g_queue_push_nomem, g_queue_drop);
 		pthread_mutex_unlock(&g_queue.mutex);
 		return -1;
 	}
 	memcpy(copy, data, (size_t)len);
 	g_queue.slot[g_queue.tail].data = copy;
 	g_queue.slot[g_queue.tail].len  = len;
+	g_queue.slot[g_queue.tail].kind = kind;
 	g_queue.tail = (g_queue.tail + 1) % H264_QUEUE_CAP;
 	g_queue.count++;
 	g_h264_seq++;
 	if ((g_h264_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
-		CPD_LOG("h264_queue_push", "seq=%llu q_count=%d len=%d cost_us=%lld",
-		        g_h264_seq, g_queue.count, len, cp_now_us() - t0);
+		CPD_LOG("h264_queue_push", "seq=%llu q_count=%d len=%d kind=%s cost_us=%lld",
+		        g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), cp_now_us() - t0);
 	}
 	pthread_cond_signal(&g_queue.cond);
 	pthread_mutex_unlock(&g_queue.mutex);
@@ -649,7 +828,9 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 {
 	long long create_t0 = cp_now_us();
 	ERRORTYPE ret;
+	ERRORTYPE tune_ret;
 	VDEC_CHN_ATTR_S vdec_attr;
+	VideoStreamInfo stream_info;
 	VO_PUB_ATTR_S vo_pub;
 	VO_VIDEO_LAYER_ATTR_S layer_attr;
 	CLOCK_CHN_ATTR_S clock_attr;
@@ -658,6 +839,11 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	int fq_inited = 0;
 	int decode_thread_started = 0;
 	int display_thread_started = 0;
+	int set_stream_info = 0;
+	int force_frame_package = 0;
+	int session_fps = 0;
+	int ve_freq = 0;
+	int ve_freq_set = 0;
 
 	if (g_ctx.running)
 		return -1;
@@ -676,7 +862,7 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	g_ctx.vo_chn   = VO_CHN_DEFAULT;
 	g_ctx.vdec_chn = VDEC_CHN_DEFAULT;
 	g_ctx.clock_chn = CLOCK_CHN_DEFAULT;
-	g_ctx.stream_buf_size = 2 * 1024 * 1024;
+	g_ctx.stream_buf_size = 4 * 1024 * 1024;
 	ret = AW_MPI_SYS_MmzAlloc_Cached(&g_ctx.stream_buf_phy, &g_ctx.stream_buf_vir,
 	                                  (int)g_ctx.stream_buf_size);
 	if (ret != SUCCESS) {
@@ -703,10 +889,11 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	memset(&vdec_attr, 0, sizeof(vdec_attr));
 	vdec_attr.mType = PT_H264;
 	vdec_attr.mOutputPixelFormat = MM_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
-	vdec_attr.mBufSize = (unsigned int)(2 * 1024 * 1024);
+	vdec_attr.mBufSize = (unsigned int)(4 * 1024 * 1024);
 	vdec_attr.mPicWidth  = (unsigned int)session_width;
 	vdec_attr.mPicHeight = (unsigned int)session_height;
 	vdec_attr.mVdecVideoAttr.mMode = VIDEO_MODE_STREAM;
+	// vdec_attr.mVdecVideoAttr.mMode = VIDEO_MODE_FRAME;
 	ret = AW_MPI_VDEC_CreateChn(g_ctx.vdec_chn, &vdec_attr);
 	if (ret != SUCCESS && ret != ERR_VDEC_EXIST) {
 		if (g_ctx.stream_buf_phy)
@@ -720,6 +907,52 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 		return -1;
 	}
 	AW_MPI_VDEC_RegisterCallback(g_ctx.vdec_chn, &cb_empty);
+
+	set_stream_info = cpd_env_int("CP_VDEC_SET_STREAM_INFO", 1) ? 1 : 0;
+	force_frame_package = cpd_env_int("CP_VDEC_FORCE_FRAME_PACKAGE", 0) ? 1 : 0;
+	session_fps = cpd_guess_session_fps();
+	ve_freq_set = cpd_env_opt_int("CP_VDEC_VE_FREQ", &ve_freq);
+
+	printf("[carplay_display] vdec_tuning_cfg set_stream_info=%d force_frame_package=%d session_fps=%d ve_freq=%s%d\n",
+	       set_stream_info, force_frame_package, session_fps, ve_freq_set ? "" : "<unset>", ve_freq_set ? ve_freq : 0);
+
+	if (set_stream_info) {
+		memset(&stream_info, 0, sizeof(stream_info));
+		stream_info.eCodecFormat = VIDEO_CODEC_FORMAT_H264;
+		stream_info.nWidth = session_width;
+		stream_info.nHeight = session_height;
+		stream_info.nFrameRate = session_fps;
+		stream_info.nFrameDuration = 0;
+		stream_info.bIsFramePackage = force_frame_package ? 1 : 0;
+		tune_ret = AW_MPI_VDEC_SetVideoStreamInfo(g_ctx.vdec_chn, &stream_info);
+		if (tune_ret != SUCCESS) {
+			printf("[carplay_display] AW_MPI_VDEC_SetVideoStreamInfo failed ret=%d\n", tune_ret);
+		} else {
+			printf("[carplay_display] AW_MPI_VDEC_SetVideoStreamInfo ok %dx%d fps=%d frame_pkg=%d\n",
+			       stream_info.nWidth, stream_info.nHeight, stream_info.nFrameRate, stream_info.bIsFramePackage);
+		}
+	}
+
+	if (force_frame_package) {
+		tune_ret = AW_MPI_VDEC_ForceFramePackage(g_ctx.vdec_chn, TRUE);
+		if (tune_ret != SUCCESS)
+			printf("[carplay_display] AW_MPI_VDEC_ForceFramePackage failed ret=%d\n", tune_ret);
+		else
+			printf("[carplay_display] AW_MPI_VDEC_ForceFramePackage enabled\n");
+	}
+
+	if (ve_freq_set) {
+		if (ve_freq < 0 || ve_freq > 2000) {
+			printf("[carplay_display] ignore invalid CP_VDEC_VE_FREQ=%d\n", ve_freq);
+		} else {
+			tune_ret = AW_MPI_VDEC_SetVEFreq(MM_INVALID_CHN, ve_freq);
+			if (tune_ret != SUCCESS)
+				printf("[carplay_display] AW_MPI_VDEC_SetVEFreq failed ret=%d freq=%d\n", tune_ret, ve_freq);
+			else
+				printf("[carplay_display] AW_MPI_VDEC_SetVEFreq ok freq=%d\n", ve_freq);
+		}
+	}
+
 	AW_MPI_VDEC_StartRecvStream(g_ctx.vdec_chn);
 
 	AW_MPI_VO_Enable(g_ctx.vo_dev);

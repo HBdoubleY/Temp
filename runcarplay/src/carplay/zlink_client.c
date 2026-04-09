@@ -212,11 +212,13 @@ static void session_init(void)
 	session_data.android_wired = ANDROID_WIRED_LINK_NONE;
 	session_data.android_wireless = AA_WIRELESS_MODE;
 	session_data.cp_icon_path = "/opt/work/app/carplay/icon/icon_104_104.png";
-	session_data.is_use_phone_audio = 0;
+	// session_data.is_use_phone_audio = 0;
+	session_data.is_use_phone_audio = 1;
 	session_data.platform_id = "zlink";
 	session_data.vendor_name = "zlink-test";
 	session_data.is_force_usb_host = 0;
-	session_data.mfi_bus_num = -1;
+	// session_data.mfi_bus_num = -1;
+	session_data.mfi_bus_num = 3;
 	session_data.otg_bus_num = -1;
 
 	libzlink_init_session_2(&session_data);

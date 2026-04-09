@@ -845,7 +845,7 @@ int lvgl_main(int w, int h)
     setup_ui(&guider_ui);
 	lv_task_handler();
     custom_init(&guider_ui);
-  
+
     if(g_sys_Data.themeMode == THEME_AUTO){
         createLightPerceptionThread();
         autoModeTimer = lv_timer_create(creatAutoModeTimerCbk, 1000, NULL);
