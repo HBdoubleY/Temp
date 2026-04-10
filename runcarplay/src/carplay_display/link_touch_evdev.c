@@ -71,6 +71,7 @@ static unsigned long long g_noise_filter_release_cnt;
 static unsigned long long g_move_suppress_cnt;
 static long long g_batch_first_event_us;
 static long long g_last_poll_wakeup_us;
+static long long g_last_touch_emit_us;
 
 static long long link_touch_now_us(void)
 {
@@ -326,13 +327,18 @@ static void run_emit_after_batch(void)
 	g_touch_seq++;
 	emit_link_touch_locked(out_x, out_y, current_state);
 	pthread_mutex_unlock(&g_touch_mutex);
+	long long now_us = link_touch_now_us();
 	if ((g_touch_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL && g_batch_first_event_us > 0) {
-		long long now_us = link_touch_now_us();
 		long long pipeline_us = now_us - g_batch_first_event_us;
+		long long emit_interval_us = (g_last_touch_emit_us > 0) ? (now_us - g_last_touch_emit_us) : 0;
 		CPT_LOG("touch_emit", "seq=%llu state=%d x=%d y=%d pipeline_us=%lld noise_rel=%llu move_suppress=%llu",
 		        g_touch_seq, current_state, out_x, out_y, pipeline_us,
 		        g_noise_filter_release_cnt, g_move_suppress_cnt);
+		if (emit_interval_us > 0) {
+			CPT_LOG("touch_emit_interval", "seq=%llu interval_us=%lld", g_touch_seq, emit_interval_us);
+		}
 	}
+	g_last_touch_emit_us = now_us;
 	g_batch_first_event_us = 0;
 }
 
@@ -373,12 +379,18 @@ static void *link_touch_thread_fn(void *arg)
 			continue;
 
 		int batch_events = 0;
+		int emit_count = 0;
 		for (;;) {
 			struct input_event in;
 			ssize_t n = read(g_evdev_fd, &in, sizeof(in));
 
 			if (n == (ssize_t)sizeof(in)) {
-				process_input_event(&in);
+				if (in.type == EV_SYN && in.code == SYN_REPORT) {
+					run_emit_after_batch();
+					emit_count++;
+				} else {
+					process_input_event(&in);
+				}
 				batch_events++;
 				continue;
 			}
@@ -390,9 +402,10 @@ static void *link_touch_thread_fn(void *arg)
 		}
 		if (zlink_client_perf_is_enabled() && batch_events > 0) {
 			long long loop_cost = link_touch_now_us() - poll_start_us;
-			CPT_LOG("touch_batch", "events=%d read_loop_cost_us=%lld", batch_events, loop_cost);
+			CPT_LOG("touch_batch", "events=%d emits=%d read_loop_cost_us=%lld", batch_events, emit_count, loop_cost);
 		}
-		run_emit_after_batch();
+		if (emit_count == 0 && batch_events > 0)
+			run_emit_after_batch();
 	}
 
 	if (g_evdev_fd >= 0) {
@@ -436,7 +449,6 @@ void carplay_link_touch_init(void)
 	g_last_event_time_ms = link_touch_now_ms();
 	g_last_valid_x = 0;
 	g_last_valid_y = 0;
-
 	if (pthread_create(&g_thread, NULL, link_touch_thread_fn, NULL) != 0) {
 		perror("link_touch: pthread_create");
 		close(g_evdev_fd);

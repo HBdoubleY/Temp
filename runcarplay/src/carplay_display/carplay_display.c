@@ -69,6 +69,9 @@ static struct {
 #define FFMPEG_FRAME_POOL_CAP 10
 #define DECODE_DROP_FQ_BACKLOG 1
 #define DECODE_DROP_H264Q_BACKLOG 24
+#define DISPLAY_KEEP_FRAMES_DEFAULT 3
+#define DISPLAY_KEEP_FRAMES_TOUCH 2
+#define DISPLAY_DROP_THRESHOLD 5
 #define CPD_PERF_PERIOD_US (3 * 1000000LL)
 
 static struct {
@@ -297,6 +300,9 @@ static unsigned long long g_fq_drop = 0;
 static unsigned long long g_disp_fq_skip = 0;
 static long long g_last_vo_release_us = 0;
 static long long g_last_touch_send_us = 0;
+static int g_touch_calib_x = 0;
+static int g_touch_calib_y = 0;
+static int g_touch_calib_inited = 0;
 
 static struct {
 	long long last_print_us;
@@ -329,11 +335,24 @@ static long long cp_tid(void)
 	return (long long)syscall(SYS_gettid);
 }
 
+static int cpd_env_int(const char *key, int def);
+
 static int cpd_touch_recently_active(void)
 {
 	long long now = cp_now_us();
 	long long dt = now - g_last_touch_send_us;
 	return (dt >= 0 && dt <= 180000) ? 1 : 0;
+}
+
+static void cpd_touch_calib_init_once(void)
+{
+	if (g_touch_calib_inited)
+		return;
+	g_touch_calib_x = cpd_env_int("LINK_TOUCH_CALIB_X", 0);
+	g_touch_calib_y = cpd_env_int("LINK_TOUCH_CALIB_Y", 0);
+	g_touch_calib_inited = 1;
+	printf("[carplay_touch] calib_x=%d calib_y=%d (positive means shift left/up)\n",
+	       g_touch_calib_x, g_touch_calib_y);
 }
 
 static void cpd_perf_maybe_print(void)
@@ -721,6 +740,22 @@ static int g2d_rotate_frame(VIDEO_FRAME_INFO_S *src, VIDEO_FRAME_INFO_S *dst)
 
 	int src_w = src->VFrame.mWidth;
 	int src_h = src->VFrame.mHeight;
+	int src_left = src->VFrame.mOffsetLeft;
+	int src_top = src->VFrame.mOffsetTop;
+	int src_right = src->VFrame.mOffsetRight;
+	int src_bottom = src->VFrame.mOffsetBottom;
+	if (src_left < 0 || src_left >= src_w) src_left = 0;
+	if (src_top < 0 || src_top >= src_h) src_top = 0;
+	if (src_right <= src_left || src_right > src_w) src_right = src_w;
+	if (src_bottom <= src_top || src_bottom > src_h) src_bottom = src_h;
+	int vis_w = src_right - src_left;
+	int vis_h = src_bottom - src_top;
+	if (vis_w <= 0 || vis_h <= 0) {
+		src_left = 0;
+		src_top = 0;
+		vis_w = src_w;
+		vis_h = src_h;
+	}
 
 	g2d_fmt_enh src_fmt, dst_fmt;
 	if (convert_PIXEL_FORMAT_E_to_g2d_fmt_enh(src->VFrame.mPixelFormat, &src_fmt) != SUCCESS)
@@ -741,21 +776,10 @@ static int g2d_rotate_frame(VIDEO_FRAME_INFO_S *src, VIDEO_FRAME_INFO_S *dst)
 	blit.src_image_h.align[0] = 0;
 	blit.src_image_h.align[1] = 0;
 	blit.src_image_h.align[2] = 0;
-	int crop_x = 0;
-	int crop_y = 0;
-	int crop_w = src_w;
-	int crop_h = src_h;
-
-	if (src_w >= 1440 && src_h >= 720) {
-		crop_w = 1440;
-		crop_h = 720;
-		crop_x = (src_w - crop_w) / 2;
-		crop_y = (src_h - crop_h) / 2;
-	}
-	blit.src_image_h.clip_rect.x = crop_x;
-	blit.src_image_h.clip_rect.y = crop_y;
-	blit.src_image_h.clip_rect.w = crop_w;
-	blit.src_image_h.clip_rect.h = crop_h;
+	blit.src_image_h.clip_rect.x = src_left;
+	blit.src_image_h.clip_rect.y = src_top;
+	blit.src_image_h.clip_rect.w = vis_w;
+	blit.src_image_h.clip_rect.h = vis_h;
 	blit.src_image_h.gamut = G2D_BT709;
 	blit.src_image_h.bpremul = 0;
 	blit.src_image_h.mode = G2D_PIXEL_ALPHA;
@@ -953,10 +977,17 @@ static void *decode_thread_fn(void *arg)
 		g_pstat.send_total_us += (unsigned long long)(send_cost > 0 ? send_cost : 0);
 		if (send_ret != SUCCESS) {
 			g_pstat.send_fail++;
+			CPD_LOG("aw_send_stream_fail", "seq=%llu len=%u ret=0x%x send_us=%lld",
+			        g_decode_seq, stream.mLen, (unsigned int)send_ret, send_cost);
 			continue;
+		}
+		if (send_cost > (long long)zlink_client_perf_warn_us()) {
+			CPD_LOG("aw_send_stream_slow", "seq=%llu len=%u send_us=%lld",
+			        g_decode_seq, stream.mLen, send_cost);
 		}
 
 		int frame_cnt = 0;
+		long long get_loop_t0 = cp_now_us();
 		for (;;) {
 			ERRORTYPE ret = AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 0);
 			if (ret != SUCCESS)
@@ -978,7 +1009,19 @@ static void *decode_thread_fn(void *arg)
 			pthread_cond_signal(&g_fq.cond);
 			pthread_mutex_unlock(&g_fq.mutex);
 		}
+		long long get_loop_us = cp_now_us() - get_loop_t0;
 		g_pstat.dec_out += (unsigned long long)frame_cnt;
+		if (frame_cnt == 0) {
+			int q_count = 0;
+			pthread_mutex_lock(&g_queue.mutex);
+			q_count = g_queue.count;
+			pthread_mutex_unlock(&g_queue.mutex);
+			CPD_LOG("aw_decode_no_frame", "seq=%llu len=%u q_depth=%d send_us=%lld",
+			        g_decode_seq, stream.mLen, q_count, send_cost);
+		} else if (get_loop_us > (long long)zlink_client_perf_warn_us()) {
+			CPD_LOG("aw_get_image_slow", "seq=%llu frames=%d get_us=%lld",
+			        g_decode_seq, frame_cnt, get_loop_us);
+		}
 	}
 	fq_shutdown();
 	return NULL;
@@ -1004,13 +1047,18 @@ static void *display_thread_fn(void *arg)
 			break;
 		}
 
-		while (g_fq.count > 1) {
+		int keep_frames = cpd_touch_recently_active() ? DISPLAY_KEEP_FRAMES_TOUCH : DISPLAY_KEEP_FRAMES_DEFAULT;
+		if (keep_frames < 1)
+			keep_frames = 1;
+		while (g_fq.count > DISPLAY_DROP_THRESHOLD) {
 			VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
 			g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 			g_fq.count--;
 			decoder_release_frame(&old);
 			g_disp_fq_skip++;
 			g_pstat.disp_fq_skip++;
+			if (g_fq.count <= keep_frames)
+				break;
 		}
 		frame = g_fq.slot[g_fq.head];
 		g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
@@ -1022,19 +1070,36 @@ static void *display_thread_fn(void *arg)
 		if (!got)
 			continue;
 
-		if (!g_ctx.g2d_dst_allocated) {
-			int dst_w = g_ctx.disp_width;
-			int dst_h = g_ctx.disp_height;
-			if (g2d_alloc_dst(dst_w, dst_h, frame.VFrame.mPixelFormat) != 0) {
-				AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
-				decoder_release_frame(&frame);
-				continue;
+		{
+			/* Rotate 270: output geometry becomes src_h x src_w. */
+			int dst_w = frame.VFrame.mHeight;
+			int dst_h = frame.VFrame.mWidth;
+			int did_alloc = 0;
+			if (dst_w <= 0 || dst_h <= 0) {
+				dst_w = g_ctx.disp_width;
+				dst_h = g_ctx.disp_height;
 			}
-
-			pthread_mutex_lock(&g_ctx.g2d_use_mutex);
-			for (int i = 0; i < 3; i++)
-				g_ctx.g2d_dst_in_use[i] = 0;
-			pthread_mutex_unlock(&g_ctx.g2d_use_mutex);
+			if (g_ctx.g2d_dst_allocated &&
+			    (g_ctx.g2d_dst[0].VFrame.mWidth != dst_w ||
+			     g_ctx.g2d_dst[0].VFrame.mHeight != dst_h ||
+			     g_ctx.g2d_dst[0].VFrame.mPixelFormat != frame.VFrame.mPixelFormat)) {
+				/* Resolution changed (e.g. fallback mode), rebuild G2D destination buffers. */
+				g2d_free_dst();
+			}
+			if (!g_ctx.g2d_dst_allocated) {
+				if (g2d_alloc_dst(dst_w, dst_h, frame.VFrame.mPixelFormat) != 0) {
+					AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
+					decoder_release_frame(&frame);
+					continue;
+				}
+				did_alloc = 1;
+			}
+			if (did_alloc) {
+				pthread_mutex_lock(&g_ctx.g2d_use_mutex);
+				for (int i = 0; i < 3; i++)
+					g_ctx.g2d_dst_in_use[i] = 0;
+				pthread_mutex_unlock(&g_ctx.g2d_use_mutex);
+			}
 		}
 
 		int cur_buf = g_ctx.g2d_buf_idx;
@@ -1070,6 +1135,12 @@ static void *display_thread_fn(void *arg)
 			AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
 		}
 		long long vo_cost = cp_now_us() - vo_t0;
+		long long touch_to_display_us = 0;
+		if (g_last_touch_send_us > 0) {
+			long long now_us = cp_now_us();
+			if (now_us >= g_last_touch_send_us)
+				touch_to_display_us = now_us - g_last_touch_send_us;
+		}
 		if (vo_cost > (long long)zlink_client_perf_warn_us()) {
 			CPD_LOG("display_vo_send_slow", "vo_cost_us=%lld", vo_cost);
 		}
@@ -1080,6 +1151,9 @@ static void *display_thread_fn(void *arg)
 		if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 			CPD_LOG("display_frame", "fq_wait_us=%lld g2d_wait_us=%lld g2d_cost_us=%lld vo_cost_us=%lld g2d_ret=%d",
 			        fq_wait_us, g2d_wait_us, g2d_cost, vo_cost, g2d_ret);
+			if (touch_to_display_us > 0 && cpd_touch_recently_active()) {
+				CPD_LOG("touch_to_display", "delta_us=%lld", touch_to_display_us);
+			}
 		}
 		decoder_release_frame(&frame);
 	}
@@ -1093,6 +1167,7 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 {
 	int session_width, session_height;
 	long long t0 = cp_now_us();
+	cpd_touch_calib_init_once();
 
 	pthread_mutex_lock(&g_ctx.rect_mutex);
 	session_width  = g_ctx.session_width;
@@ -1101,12 +1176,20 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 
 	if (session_width <= 0 || session_height <= 0)
 		return;
-	if (screen_x < 0 || screen_x >= LVGL_LOGICAL_W ||
-	    screen_y < 0 || screen_y >= LVGL_LOGICAL_H)
+	/* Apply optional calibration before mapping to session coordinates. */
+	int adj_x = screen_x - g_touch_calib_x;
+	int adj_y = screen_y - g_touch_calib_y;
+	if (adj_x < 0) adj_x = 0;
+	if (adj_y < 0) adj_y = 0;
+	if (adj_x >= LVGL_LOGICAL_W) adj_x = LVGL_LOGICAL_W - 1;
+	if (adj_y >= LVGL_LOGICAL_H) adj_y = LVGL_LOGICAL_H - 1;
+
+	if (adj_x < 0 || adj_x >= LVGL_LOGICAL_W ||
+	    adj_y < 0 || adj_y >= LVGL_LOGICAL_H)
 		return;
 
-	int session_x = (int)((long)screen_x * session_width  / LVGL_LOGICAL_W);
-	int session_y = (int)((long)screen_y * session_height / LVGL_LOGICAL_H);
+	int session_x = (int)((long)adj_x * session_width  / LVGL_LOGICAL_W);
+	int session_y = (int)((long)adj_y * session_height / LVGL_LOGICAL_H);
 	if (session_x < 0) session_x = 0;
 	if (session_x >= session_width)  session_x = session_width - 1;
 	if (session_y < 0) session_y = 0;
@@ -1115,8 +1198,8 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 	libzlink_touch_event(session_x, session_y, is_touch_down);
 	g_last_touch_send_us = cp_now_us();
 	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
-		CPD_LOG("touch_map_send", "sx=%d sy=%d tx=%d ty=%d down=%d cost_us=%lld",
-		        screen_x, screen_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
+		CPD_LOG("touch_map_send", "sx=%d sy=%d adjx=%d adjy=%d tx=%d ty=%d down=%d cost_us=%lld",
+		        screen_x, screen_y, adj_x, adj_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
 	}
 }
 
@@ -1430,6 +1513,11 @@ void carplay_touch_send_xy(int screen_x, int screen_y, int is_touch_down)
 {
 	long long t0 = cp_now_us();
 	touch_apply_and_send(screen_x, screen_y, is_touch_down);
+	if (is_touch_down || cpd_touch_recently_active()) {
+		pthread_mutex_lock(&g_fq.mutex);
+		pthread_cond_signal(&g_fq.cond);
+		pthread_mutex_unlock(&g_fq.mutex);
+	}
 	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 		CPD_LOG("touch_send_xy", "x=%d y=%d down=%d cost_us=%lld",
 		        screen_x, screen_y, is_touch_down, cp_now_us() - t0);

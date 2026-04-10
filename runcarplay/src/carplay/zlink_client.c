@@ -25,7 +25,14 @@ extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
 /* Lower default fps for softer CPU load and better touch responsiveness. */
-static int g_session_fps = 14;
+static int g_session_fps = 25;
+static int g_session_width = 960;
+static int g_session_height = 480;
+static int g_session_fallback_w[3] = {960, 1440, 0};
+static int g_session_fallback_h[3] = {480, 720, 0};
+static int g_session_fallback_count = 1;
+static int g_session_fallback_idx = 0;
+static int g_session_init_attempts = 0;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
@@ -188,20 +195,50 @@ static int link_type_from_phone_type(enum PHONE_TYPE phone_type)
 static void zlink_load_session_tuning(void)
 {
 	const char *fps = getenv("ZLINK_SESSION_FPS");
+	const char *res = getenv("ZLINK_SESSION_RES");
 	if (fps && fps[0] != '\0') {
 		int v = atoi(fps);
 		if (v >= 12 && v <= 30)
 			g_session_fps = v;
 	}
-	printf("zlink session tuning: fps=%d\n", g_session_fps);
+	if (res && res[0] != '\0') {
+		int w = 0;
+		int h = 0;
+		if (sscanf(res, "%dx%d", &w, &h) == 2) {
+			if ((w == 720 && h == 360) || (w == 960 && h == 480) || (w == 1440 && h == 720)) {
+				g_session_width = w;
+				g_session_height = h;
+			}
+		}
+	}
+
+	if (g_session_width == 720 && g_session_height == 360) {
+		g_session_fallback_w[0] = 720;  g_session_fallback_h[0] = 360;
+		g_session_fallback_w[1] = 960;  g_session_fallback_h[1] = 480;
+		g_session_fallback_w[2] = 1440; g_session_fallback_h[2] = 720;
+		g_session_fallback_count = 3;
+	} else if (g_session_width == 960 && g_session_height == 480) {
+		g_session_fallback_w[0] = 960;  g_session_fallback_h[0] = 480;
+		g_session_fallback_w[1] = 1440; g_session_fallback_h[1] = 720;
+		g_session_fallback_w[2] = 0;    g_session_fallback_h[2] = 0;
+		g_session_fallback_count = 2;
+	} else {
+		g_session_fallback_w[0] = 960;  g_session_fallback_h[0] = 480;
+		g_session_fallback_w[1] = 1440; g_session_fallback_h[1] = 720;
+		g_session_fallback_w[2] = 0;    g_session_fallback_h[2] = 0;
+		g_session_fallback_count = 2;
+	}
+	g_session_fallback_idx = 0;
+	printf("zlink session tuning: fps=%d req_res=%dx%d fallback_cnt=%d\n",
+	       g_session_fps, g_session_width, g_session_height, g_session_fallback_count);
 }
 
 static void session_init(void)
 {
 	static struct SESSION_DATA session_data;
 	memset(&session_data, 0, sizeof(session_data));
-	session_data.width = 1440;		// （要和后面解码显示的 session 宽高一致）。
-	session_data.height = 720;
+	session_data.width = g_session_fallback_w[g_session_fallback_idx];
+	session_data.height = g_session_fallback_h[g_session_fallback_idx];
 	session_data.width_margin = 0;
 	session_data.height_margin = 0;
 	session_data.fps = g_session_fps;
@@ -221,6 +258,8 @@ static void session_init(void)
 	// session_data.mfi_bus_num = -1;
 	session_data.mfi_bus_num = 3;
 	session_data.otg_bus_num = -1;
+	printf("zlink session init: attempt=%d use_res=%dx%d fps=%d\n",
+	       g_session_init_attempts + 1, session_data.width, session_data.height, session_data.fps);
 
 	libzlink_init_session_2(&session_data);
 }
@@ -292,7 +331,18 @@ static int session_state_cb(enum LIBZLINK_SESSION_STATE session_state, enum PHON
 	printf("\n\n\nsession_state_cb: session_state = %d, phone_type = %d\n\n\n", session_state, phone_type);
 	(void)user_data;
 	if (session_state == SESSION_WAIT_INIT) {
+		pthread_mutex_lock(&g_video_state.mutex);
+		int started = g_video_state.session_started;
+		pthread_mutex_unlock(&g_video_state.mutex);
+		if (!started && g_session_init_attempts > 0 && g_session_fallback_idx + 1 < g_session_fallback_count) {
+			g_session_fallback_idx++;
+			printf("zlink session fallback: switch to %dx%d (idx=%d/%d)\n",
+			       g_session_fallback_w[g_session_fallback_idx],
+			       g_session_fallback_h[g_session_fallback_idx],
+			       g_session_fallback_idx + 1, g_session_fallback_count);
+		}
 		session_init();
+		g_session_init_attempts++;
 	} else if (session_state == SESSION_STARTED) {
 		int link_type = link_type_from_phone_type(phone_type);
 		int active;
@@ -302,6 +352,7 @@ static int session_state_cb(enum LIBZLINK_SESSION_STATE session_state, enum PHON
 		g_video_state.session_started = 1;
 		active = g_video_state.active;
 		pthread_mutex_unlock(&g_video_state.mutex);
+		g_session_init_attempts = 0;
 		if (active)
 			libzlink_video_focus(0);
 		else
