@@ -64,6 +64,9 @@ int carplay_ffmpeg_decoder_create(carplay_ffmpeg_decoder_t **out, int width_hint
 	/* V853 class CPU prefers lower thread sync overhead. */
 	dec->codec_ctx->thread_count = 1;
 	dec->codec_ctx->thread_type = FF_THREAD_SLICE;
+	dec->codec_ctx->flags |= AV_CODEC_FLAG_LOW_DELAY;
+	dec->codec_ctx->flags2 |= AV_CODEC_FLAG2_FAST;
+	dec->codec_ctx->skip_loop_filter = AVDISCARD_NONREF;
 	dec->codec_ctx->pkt_timebase.num = 1;
 	dec->codec_ctx->pkt_timebase.den = 1000000;
 

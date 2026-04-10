@@ -281,6 +281,7 @@ static unsigned long long g_queue_push_nomem = 0;
 static unsigned long long g_fq_drop = 0;
 static unsigned long long g_disp_fq_skip = 0;
 static long long g_last_vo_release_us = 0;
+static long long g_last_touch_send_us = 0;
 
 static struct {
 	long long last_print_us;
@@ -311,6 +312,13 @@ static long long cp_now_us(void)
 static long long cp_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
+}
+
+static int cpd_touch_recently_active(void)
+{
+	long long now = cp_now_us();
+	long long dt = now - g_last_touch_send_us;
+	return (dt >= 0 && dt <= 180000) ? 1 : 0;
 }
 
 static void cpd_perf_maybe_print(void)
@@ -835,7 +843,7 @@ static void *decode_thread_fn(void *arg)
 			pthread_mutex_lock(&g_fq.mutex);
 			int fq_backlog = g_fq.count;
 			pthread_mutex_unlock(&g_fq.mutex);
-			if (carplay_touch_screen_down && fq_backlog >= 1) {
+			if ((carplay_touch_screen_down || cpd_touch_recently_active()) && fq_backlog >= 1) {
 				/* Touch interaction: favor latest frame for better perceived follow. */
 				g_pstat.dec_drop_touch++;
 				continue;
@@ -1020,6 +1028,7 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 	if (session_y >= session_height) session_y = session_height - 1;
 
 	libzlink_touch_event(session_x, session_y, is_touch_down);
+	g_last_touch_send_us = cp_now_us();
 	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 		CPD_LOG("touch_map_send", "sx=%d sy=%d tx=%d ty=%d down=%d cost_us=%lld",
 		        screen_x, screen_y, session_x, session_y, is_touch_down, cp_now_us() - t0);

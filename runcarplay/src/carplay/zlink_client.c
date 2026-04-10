@@ -25,7 +25,7 @@ extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
 /* Lower default fps for softer CPU load and better touch responsiveness. */
-static int g_session_fps = 12;
+static int g_session_fps = 14;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
