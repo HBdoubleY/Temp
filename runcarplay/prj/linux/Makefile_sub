@@ -90,6 +90,7 @@ CEDAR_INC  += -I$(USRLIB_PATH)/../lvgl-gui/ui/generated/
 
 
 CEDAR_INC  += -I$(USRLIB_PATH)/carplay/include/
+CEDAR_INC  += -I$(USRLIB_PATH)/ffmpeg/include
 
 MAKE = make
 
@@ -97,6 +98,7 @@ MAKE = make
 LIBSA +=  -ldl -lrt -lpthread -lm -lc -lz  -fPIC -Wall -Wno-unused-but-set-variable \
      	-Wl,--start-group   \
 -L../../../external/lib      \
+-L../../../external/ffmpeg/lib      \
 -L../../../external/aw_pack_src/lib_aw/lib/eyesee-mpp	\
 -L../../../external/aw_pack_src/lib_aw/lib/libawaiisp	\
 -L../../../external/carplay/lib	\
@@ -118,6 +120,7 @@ LIBSA +=  -ldl -lrt -lpthread -lm -lc -lz  -fPIC -Wall -Wno-unused-but-set-varia
 -lisp_iso -lz -lmotion -lglog -llog -lcdx_stream -lFsWriter -lAgc \
 -lcdx_id3v2_parser -lcdx_amr_parser -lisp_rolloff -lawaiisp \
 -lunwind -lasound -llua -luapi -lpng -lluaconfig \
+-lavcodec -lavutil \
 $(if $(filter 0,$(CONFIG_CARPLAY)),,-lzlink)	\
 -llvgl 	\
     	-Wl,--end-group
@@ -178,11 +181,14 @@ $(CPPOBJS) : $(OBJROOTDIR)%.o:$(SRCDIR)%.cpp
 	$(CPP) -c $< -o $@  $(CPPFLAGS) $(CEDAR_INC) $(SRCINC)
 
 ifneq ($(CONFIG_CARPLAY),0)
-CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
+CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/carplay_ffmpeg_decoder.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
 $(OBJROOTDIR)/carplay/zlink_client.o: $(SRCDIR)/carplay/zlink_client.c
 	@mkdir -p $(OBJROOTDIR)/carplay
 	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
 $(OBJROOTDIR)/carplay_display/carplay_display.o: $(SRCDIR)/carplay_display/carplay_display.c
+	@mkdir -p $(OBJROOTDIR)/carplay_display
+	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
+$(OBJROOTDIR)/carplay_display/carplay_ffmpeg_decoder.o: $(SRCDIR)/carplay_display/carplay_ffmpeg_decoder.c
 	@mkdir -p $(OBJROOTDIR)/carplay_display
 	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)
 $(OBJROOTDIR)/carplay_display/link_touch_evdev.o: $(SRCDIR)/carplay_display/link_touch_evdev.c
@@ -203,7 +209,7 @@ $(BIN) : $(COBJS) $(CPPOBJS) $(CARPLAY_OBJS)
 .PHONY:clean cleanall distclean
 
 clean:
-	@rm -f $(BIN) $(COBJS) $(CPPOBJS) $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
+	@rm -f $(BIN) $(COBJS) $(CPPOBJS) $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/carplay_ffmpeg_decoder.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
 
 cleanall:
 	@rm -f $(CDEF) $(CPPDEF)

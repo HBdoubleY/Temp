@@ -24,7 +24,7 @@
 extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
-static int g_session_fps = 30;
+static int g_session_fps = 20;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)

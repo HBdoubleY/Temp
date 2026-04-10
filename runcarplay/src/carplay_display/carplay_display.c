@@ -2,6 +2,7 @@
 #ifdef ENABLE_CARPLAY
 
 #include "carplay_display.h"
+#include "carplay_ffmpeg_decoder.h"
 #include "mpp_compat.h"
 #include <stdlib.h>
 #include <string.h>
@@ -31,8 +32,8 @@ int carplay_touch_screen_y   = 0;
 int carplay_touch_screen_down = 0;
 int carplay_split_screen_enable = 0;
 int carplay_split_line_x = 720;
-#define H264_QUEUE_CAP      16
-#define H264_QUEUE_EVICT_BATCH 10
+#define H264_QUEUE_CAP      64
+#define H264_QUEUE_EVICT_BATCH 24
 #define H264_PACKET_MAX     (256 * 1024)
 
 typedef enum {
@@ -60,7 +61,23 @@ static struct {
 } g_queue;
 
 #define FRAME_QUEUE_CAP 8
+#define FFMPEG_FRAME_POOL_CAP 6
+#define DECODE_DROP_FQ_BACKLOG 2
+#define DECODE_DROP_H264Q_BACKLOG 24
 #define CPD_PERF_PERIOD_US (3 * 1000000LL)
+
+static struct {
+	unsigned int phy_addr[2];
+	void *vir_addr[2];
+	int in_use;
+	VIDEO_FRAME_INFO_S frame;
+} g_ffmpeg_pool[FFMPEG_FRAME_POOL_CAP];
+
+static struct {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+} g_ffmpeg_pool_sync;
+static volatile int g_ffmpeg_pool_running = 0;
 
 static struct {
 	VIDEO_FRAME_INFO_S slot[FRAME_QUEUE_CAP];
@@ -93,20 +110,150 @@ static void fq_destroy(void)
 	pthread_cond_destroy(&g_fq.cond);
 }
 
+static int ffmpeg_pool_init(int width, int height)
+{
+	int aligned_w = AWALIGN(width, 16);
+	int aligned_h = AWALIGN(height, 16);
+	int y_size = aligned_w * aligned_h;
+	int uv_size = aligned_w * aligned_h / 2;
+
+	memset(g_ffmpeg_pool, 0, sizeof(g_ffmpeg_pool));
+	pthread_mutex_init(&g_ffmpeg_pool_sync.mutex, NULL);
+	pthread_cond_init(&g_ffmpeg_pool_sync.cond, NULL);
+
+	for (int i = 0; i < FFMPEG_FRAME_POOL_CAP; i++) {
+		VIDEO_FRAME_INFO_S *f = &g_ffmpeg_pool[i].frame;
+		memset(f, 0, sizeof(*f));
+		if (AW_MPI_SYS_MmzAlloc_Cached(&g_ffmpeg_pool[i].phy_addr[0], &g_ffmpeg_pool[i].vir_addr[0], y_size) != SUCCESS)
+			goto fail;
+		if (AW_MPI_SYS_MmzAlloc_Cached(&g_ffmpeg_pool[i].phy_addr[1], &g_ffmpeg_pool[i].vir_addr[1], uv_size) != SUCCESS)
+			goto fail;
+
+		f->VFrame.mWidth = aligned_w;
+		f->VFrame.mHeight = aligned_h;
+		f->VFrame.mPixelFormat = MM_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
+		f->VFrame.mPhyAddr[0] = g_ffmpeg_pool[i].phy_addr[0];
+		f->VFrame.mPhyAddr[1] = g_ffmpeg_pool[i].phy_addr[1];
+		f->VFrame.mpVirAddr[0] = g_ffmpeg_pool[i].vir_addr[0];
+		f->VFrame.mpVirAddr[1] = g_ffmpeg_pool[i].vir_addr[1];
+		f->VFrame.mOffsetTop = 0;
+		f->VFrame.mOffsetBottom = aligned_h;
+		f->VFrame.mOffsetLeft = 0;
+		f->VFrame.mOffsetRight = aligned_w;
+	}
+	return 0;
+fail:
+	for (int i = 0; i < FFMPEG_FRAME_POOL_CAP; i++) {
+		if (g_ffmpeg_pool[i].phy_addr[0])
+			AW_MPI_SYS_MmzFree(g_ffmpeg_pool[i].phy_addr[0], g_ffmpeg_pool[i].vir_addr[0]);
+		if (g_ffmpeg_pool[i].phy_addr[1])
+			AW_MPI_SYS_MmzFree(g_ffmpeg_pool[i].phy_addr[1], g_ffmpeg_pool[i].vir_addr[1]);
+	}
+	pthread_mutex_destroy(&g_ffmpeg_pool_sync.mutex);
+	pthread_cond_destroy(&g_ffmpeg_pool_sync.cond);
+	memset(g_ffmpeg_pool, 0, sizeof(g_ffmpeg_pool));
+	return -1;
+}
+
+static void ffmpeg_pool_destroy(void)
+{
+	for (int i = 0; i < FFMPEG_FRAME_POOL_CAP; i++) {
+		if (g_ffmpeg_pool[i].phy_addr[0])
+			AW_MPI_SYS_MmzFree(g_ffmpeg_pool[i].phy_addr[0], g_ffmpeg_pool[i].vir_addr[0]);
+		if (g_ffmpeg_pool[i].phy_addr[1])
+			AW_MPI_SYS_MmzFree(g_ffmpeg_pool[i].phy_addr[1], g_ffmpeg_pool[i].vir_addr[1]);
+		memset(&g_ffmpeg_pool[i], 0, sizeof(g_ffmpeg_pool[i]));
+	}
+	pthread_mutex_destroy(&g_ffmpeg_pool_sync.mutex);
+	pthread_cond_destroy(&g_ffmpeg_pool_sync.cond);
+}
+
+static VIDEO_FRAME_INFO_S *ffmpeg_pool_acquire(void)
+{
+	VIDEO_FRAME_INFO_S *ret = NULL;
+
+	pthread_mutex_lock(&g_ffmpeg_pool_sync.mutex);
+	while (g_ffmpeg_pool_running && !ret) {
+		for (int i = 0; i < FFMPEG_FRAME_POOL_CAP; i++) {
+			if (!g_ffmpeg_pool[i].in_use) {
+				g_ffmpeg_pool[i].in_use = 1;
+				ret = &g_ffmpeg_pool[i].frame;
+				break;
+			}
+		}
+		if (!ret)
+			pthread_cond_wait(&g_ffmpeg_pool_sync.cond, &g_ffmpeg_pool_sync.mutex);
+	}
+	pthread_mutex_unlock(&g_ffmpeg_pool_sync.mutex);
+	return ret;
+}
+
+static void ffmpeg_pool_release(VIDEO_FRAME_INFO_S *frame)
+{
+	if (!frame)
+		return;
+
+	pthread_mutex_lock(&g_ffmpeg_pool_sync.mutex);
+	for (int i = 0; i < FFMPEG_FRAME_POOL_CAP; i++) {
+		if (g_ffmpeg_pool[i].frame.VFrame.mPhyAddr[0] == frame->VFrame.mPhyAddr[0] &&
+		    g_ffmpeg_pool[i].frame.VFrame.mPhyAddr[1] == frame->VFrame.mPhyAddr[1]) {
+			g_ffmpeg_pool[i].in_use = 0;
+			pthread_cond_signal(&g_ffmpeg_pool_sync.cond);
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_ffmpeg_pool_sync.mutex);
+}
+
+static int ffmpeg_frame_to_vo_frame(const carplay_ffmpeg_frame_t *src, VIDEO_FRAME_INFO_S *dst)
+{
+	int h;
+	int w;
+	int uv_h;
+	unsigned char *dst_y;
+	unsigned char *dst_vu;
+	const unsigned char *src_y;
+	const unsigned char *src_vu;
+
+	if (!src || !dst || !src->data[0] || !src->data[1] || src->width <= 0 || src->height <= 0)
+		return -1;
+
+	w = src->width;
+	h = src->height;
+	uv_h = h / 2;
+	dst_y = (unsigned char *)dst->VFrame.mpVirAddr[0];
+	dst_vu = (unsigned char *)dst->VFrame.mpVirAddr[1];
+	src_y = (const unsigned char *)src->data[0];
+	src_vu = (const unsigned char *)src->data[1];
+
+	dst->VFrame.mWidth = w;
+	dst->VFrame.mHeight = h;
+	dst->VFrame.mOffsetTop = 0;
+	dst->VFrame.mOffsetBottom = h;
+	dst->VFrame.mOffsetLeft = 0;
+	dst->VFrame.mOffsetRight = w;
+
+	for (int r = 0; r < h; r++)
+		memcpy(dst_y + (size_t)r * w, src_y + (size_t)r * src->linesize[0], (size_t)w);
+	for (int r = 0; r < uv_h; r++)
+		memcpy(dst_vu + (size_t)r * w, src_vu + (size_t)r * src->linesize[1], (size_t)w);
+
+	AW_MPI_SYS_MmzFlushCache(dst->VFrame.mPhyAddr[0], dst->VFrame.mpVirAddr[0], w * h);
+	AW_MPI_SYS_MmzFlushCache(dst->VFrame.mPhyAddr[1], dst->VFrame.mpVirAddr[1], w * uv_h);
+	return 0;
+}
+
 static struct {
 	int disp_x, disp_y, disp_width, disp_height;
 	int session_width, session_height;
 	int vo_dev;
 	int vo_layer;
 	int vo_chn;
-	int vdec_chn;
 	int clock_chn;
 	pthread_t decode_tid;
 	pthread_t display_tid;
 	volatile int running;
-	unsigned int stream_buf_phy;
-	void *stream_buf_vir;
-	size_t stream_buf_size;
+	carplay_ffmpeg_decoder_t *ffmpeg_dec;
 	pthread_mutex_t rect_mutex;
 	VIDEO_FRAME_INFO_S g2d_dst[3];
 	int g2d_dst_allocated;
@@ -131,6 +278,8 @@ static struct {
 	long long last_print_us;
 	unsigned long long dec_in;
 	unsigned long long dec_out;
+	unsigned long long dec_drop_bp;
+	unsigned long long dec_drop_nonkey;
 	unsigned long long disp;
 	unsigned long long fq_drop;
 	unsigned long long h264_evict;
@@ -140,6 +289,7 @@ static struct {
 	unsigned long long vo_total_us;
 	unsigned long long disp_fq_skip;
 	unsigned long long send_total_us;
+	unsigned long long pool_wait_max_us;
 } g_pstat;
 
 static long long cp_now_us(void)
@@ -167,12 +317,12 @@ static void cpd_perf_maybe_print(void)
 	unsigned long long g2d_avg = g_pstat.disp > 0 ? g_pstat.g2d_total_us / g_pstat.disp : 0;
 	unsigned long long vo_avg = g_pstat.disp > 0 ? g_pstat.vo_total_us / g_pstat.disp : 0;
 	unsigned long long send_avg = g_pstat.dec_in > 0 ? g_pstat.send_total_us / g_pstat.dec_in : 0;
-	printf("[carplay_perf] period=%lldms dec_in=%llu dec_out=%llu disp=%llu fq_drop=%llu fq_skip=%llu h264_evict=%llu h264_drop=%llu send_fail=%llu send_avg_us=%llu g2d_avg_us=%llu vo_avg_us=%llu\n",
+	printf("[carplay_perf] period=%lldms dec_in=%llu dec_out=%llu dec_drop_bp=%llu dec_drop_nonkey=%llu disp=%llu fq_drop=%llu fq_skip=%llu h264_evict=%llu h264_drop=%llu send_fail=%llu send_avg_us=%llu g2d_avg_us=%llu vo_avg_us=%llu pool_wait_max_us=%llu\n",
 	       elapsed / 1000LL,
-	       g_pstat.dec_in, g_pstat.dec_out, g_pstat.disp,
+	       g_pstat.dec_in, g_pstat.dec_out, g_pstat.dec_drop_bp, g_pstat.dec_drop_nonkey, g_pstat.disp,
 	       g_pstat.fq_drop, g_pstat.disp_fq_skip,
 	       g_pstat.h264_evict, g_pstat.h264_drop, g_pstat.send_fail,
-	       send_avg, g2d_avg, vo_avg);
+	       send_avg, g2d_avg, vo_avg, g_pstat.pool_wait_max_us);
 	memset(&g_pstat, 0, sizeof(g_pstat));
 	g_pstat.last_print_us = now;
 }
@@ -279,7 +429,6 @@ static h264_nal_kind_t h264_classify_packet(const char *data, int len)
 
 #define VO_LAYER_DEFAULT  0
 #define VO_CHN_DEFAULT     0
-#define VDEC_CHN_DEFAULT   0
 #define CLOCK_CHN_DEFAULT  0
 
 #ifndef AWALIGN
@@ -445,6 +594,15 @@ static int queue_pop(h264_packet_t *out)
 	return 0;
 }
 
+static int queue_count_get(void)
+{
+	int count;
+	pthread_mutex_lock(&g_queue.mutex);
+	count = g_queue.count;
+	pthread_mutex_unlock(&g_queue.mutex);
+	return count;
+}
+
 static int g2d_alloc_one(VIDEO_FRAME_INFO_S *dst, int aligned_w, int aligned_h, PIXEL_FORMAT_E pix_fmt)
 {
 	int y_size = aligned_w * aligned_h;
@@ -600,17 +758,20 @@ static void *decode_thread_fn(void *arg)
 {
 	(void)arg;
 	carplay_set_self_sched_fifo_max("carplay_decode");
-	VDEC_STREAM_S stream;
-	VIDEO_FRAME_INFO_S frame;
-	memset(&stream, 0, sizeof(stream));
-	stream.pAddr = (unsigned char *)g_ctx.stream_buf_vir;
+	carplay_ffmpeg_frame_t ff_frame;
 
 	while (g_ctx.running) {
 		h264_packet_t pkt;
+		int pkt_len;
+		int h264_q_backlog;
 		if (queue_pop(&pkt) != 0)
 			break;
+		pkt_len = pkt.len;
 		g_decode_seq++;
-		if (pkt.len > (int)g_ctx.stream_buf_size) {
+		h264_q_backlog = queue_count_get();
+		if (h264_q_backlog >= DECODE_DROP_H264Q_BACKLOG &&
+		    (pkt.kind == H264_NAL_NON_KEY || pkt.kind == H264_NAL_OTHER)) {
+			g_pstat.dec_drop_nonkey++;
 			free(pkt.data);
 			continue;
 		}
@@ -635,47 +796,70 @@ static void *decode_thread_fn(void *arg)
 			g_ctx.got_idr = 1;
 		}
 
-		memcpy(g_ctx.stream_buf_vir, pkt.data, (size_t)pkt.len);
-		AW_MPI_SYS_MmzFlushCache(g_ctx.stream_buf_phy, g_ctx.stream_buf_vir, (int)pkt.len);
-		free(pkt.data);
-
-		stream.mLen = (unsigned int)pkt.len;
-		stream.mbEndOfFrame = TRUE;
-
 		g_pstat.dec_in++;
-
 		long long send_t0 = cp_now_us();
-		ERRORTYPE send_ret = AW_MPI_VDEC_SendStream(g_ctx.vdec_chn, &stream, 20);
+		int send_ret = carplay_ffmpeg_decoder_send_packet(g_ctx.ffmpeg_dec, (const uint8_t *)pkt.data, pkt_len);
 		long long send_cost = cp_now_us() - send_t0;
 		g_pstat.send_total_us += (unsigned long long)(send_cost > 0 ? send_cost : 0);
+		free(pkt.data);
 		if (send_ret != SUCCESS) {
 			g_pstat.send_fail++;
 			CPD_LOG("decode_send_fail", "seq=%llu len=%d ret=%d cost_us=%lld",
-			        g_decode_seq, pkt.len, send_ret, send_cost);
+			        g_decode_seq, pkt_len, send_ret, send_cost);
 			continue;
 		}
 		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 			CPD_LOG("decode_send", "seq=%llu len=%d cost_us=%lld",
-			        g_decode_seq, pkt.len, send_cost);
+			        g_decode_seq, pkt_len, send_cost);
 		}
 
 		int frame_cnt = 0;
 		for (;;) {
-			ERRORTYPE ret = AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 0);
-			if (ret != SUCCESS)
+			VIDEO_FRAME_INFO_S *vo_frame;
+			int ret = carplay_ffmpeg_decoder_receive_frame(g_ctx.ffmpeg_dec, &ff_frame);
+			if (ret == 1)
+				break;
+			if (ret != 0)
 				break;
 			frame_cnt++;
+
+			pthread_mutex_lock(&g_fq.mutex);
+			int fq_backlog = g_fq.count;
+			pthread_mutex_unlock(&g_fq.mutex);
+			if (fq_backlog >= DECODE_DROP_FQ_BACKLOG) {
+				/* Keep real-time smoothness under CPU pressure. */
+				g_pstat.dec_drop_bp++;
+				if ((g_pstat.dec_drop_bp % 60ULL) == 0ULL) {
+					CPD_LOG("decode_drop_bp", "fq_backlog=%d drop_bp=%llu",
+					        fq_backlog, g_pstat.dec_drop_bp);
+				}
+				continue;
+			}
+			long long pool_wait_t0 = cp_now_us();
+			vo_frame = ffmpeg_pool_acquire();
+			if (!vo_frame)
+				break;
+			long long pool_wait_us = cp_now_us() - pool_wait_t0;
+			if ((unsigned long long)pool_wait_us > g_pstat.pool_wait_max_us)
+				g_pstat.pool_wait_max_us = (unsigned long long)pool_wait_us;
+			if (pool_wait_us > (long long)zlink_client_perf_warn_us()) {
+				CPD_LOG("decode_pool_wait_slow", "wait_us=%lld", pool_wait_us);
+			}
+			if (ffmpeg_frame_to_vo_frame(&ff_frame, vo_frame) != 0) {
+				ffmpeg_pool_release(vo_frame);
+				continue;
+			}
 
 			pthread_mutex_lock(&g_fq.mutex);
 			if (g_fq.count >= FRAME_QUEUE_CAP) {
 				VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
 				g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 				g_fq.count--;
-				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+				ffmpeg_pool_release(&old);
 				g_fq_drop++;
 				g_pstat.fq_drop++;
 			}
-			g_fq.slot[g_fq.tail] = frame;
+			g_fq.slot[g_fq.tail] = *vo_frame;
 			g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
 			g_fq.count++;
 			g_frame_seq++;
@@ -683,26 +867,6 @@ static void *decode_thread_fn(void *arg)
 			pthread_mutex_unlock(&g_fq.mutex);
 		}
 
-		if (frame_cnt == 0) {
-			if (AW_MPI_VDEC_GetImage(g_ctx.vdec_chn, &frame, 10) == SUCCESS) {
-				frame_cnt++;
-				pthread_mutex_lock(&g_fq.mutex);
-				if (g_fq.count >= FRAME_QUEUE_CAP) {
-					VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
-					g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
-					g_fq.count--;
-					AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
-					g_fq_drop++;
-					g_pstat.fq_drop++;
-				}
-				g_fq.slot[g_fq.tail] = frame;
-				g_fq.tail = (g_fq.tail + 1) % FRAME_QUEUE_CAP;
-				g_fq.count++;
-				g_frame_seq++;
-				pthread_cond_signal(&g_fq.cond);
-				pthread_mutex_unlock(&g_fq.mutex);
-			}
-		}
 		g_pstat.dec_out += (unsigned long long)frame_cnt;
 		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
 			CPD_LOG("decode_get_image", "seq=%llu frames=%d fq_drop=%llu",
@@ -737,7 +901,7 @@ static void *display_thread_fn(void *arg)
 			VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
 			g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 			g_fq.count--;
-			AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+			ffmpeg_pool_release(&old);
 			g_disp_fq_skip++;
 			g_pstat.disp_fq_skip++;
 		}
@@ -756,7 +920,7 @@ static void *display_thread_fn(void *arg)
 			int dst_h = g_ctx.disp_height;
 			if (g2d_alloc_dst(dst_w, dst_h, frame.VFrame.mPixelFormat) != 0) {
 				AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
-				AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &frame);
+				ffmpeg_pool_release(&frame);
 				continue;
 			}
 
@@ -799,6 +963,9 @@ static void *display_thread_fn(void *arg)
 			AW_MPI_VO_SendFrame(g_ctx.vo_layer, g_ctx.vo_chn, &frame, 0);
 		}
 		long long vo_cost = cp_now_us() - vo_t0;
+		if (vo_cost > (long long)zlink_client_perf_warn_us()) {
+			CPD_LOG("display_vo_send_slow", "vo_cost_us=%lld", vo_cost);
+		}
 		g_pstat.disp++;
 		g_pstat.g2d_total_us += (unsigned long long)(g2d_cost > 0 ? g2d_cost : 0);
 		g_pstat.vo_total_us += (unsigned long long)(vo_cost > 0 ? vo_cost : 0);
@@ -807,7 +974,7 @@ static void *display_thread_fn(void *arg)
 			CPD_LOG("display_frame", "fq_wait_us=%lld g2d_wait_us=%lld g2d_cost_us=%lld vo_cost_us=%lld g2d_ret=%d",
 			        fq_wait_us, g2d_wait_us, g2d_cost, vo_cost, g2d_ret);
 		}
-		AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &frame);
+		ffmpeg_pool_release(&frame);
 	}
 	return NULL;
 }
@@ -882,23 +1049,15 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
                            int session_width, int session_height)
 {
 	long long create_t0 = cp_now_us();
-	ERRORTYPE ret;
-	ERRORTYPE tune_ret;
-	VDEC_CHN_ATTR_S vdec_attr;
-	VideoStreamInfo stream_info;
 	VO_PUB_ATTR_S vo_pub;
 	VO_VIDEO_LAYER_ATTR_S layer_attr;
 	CLOCK_CHN_ATTR_S clock_attr;
 	MPP_CHN_S clock_chn, vo_chn;
 	int queue_inited = 0;
 	int fq_inited = 0;
+	int ffmpeg_pool_inited = 0;
 	int decode_thread_started = 0;
 	int display_thread_started = 0;
-	int set_stream_info = 0;
-	int force_frame_package = 0;
-	int session_fps = 0;
-	int ve_freq = 0;
-	int ve_freq_set = 0;
 
 	if (g_ctx.running)
 		return -1;
@@ -915,18 +1074,7 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	g_ctx.vo_dev   = 0;
 	g_ctx.vo_layer = VO_LAYER_DEFAULT;
 	g_ctx.vo_chn   = VO_CHN_DEFAULT;
-	g_ctx.vdec_chn = VDEC_CHN_DEFAULT;
 	g_ctx.clock_chn = CLOCK_CHN_DEFAULT;
-	g_ctx.stream_buf_size = 4 * 1024 * 1024;
-	ret = AW_MPI_SYS_MmzAlloc_Cached(&g_ctx.stream_buf_phy, &g_ctx.stream_buf_vir,
-	                                  (int)g_ctx.stream_buf_size);
-	if (ret != SUCCESS) {
-		printf("[carplay_display] MmzAlloc stream_buf failed, fallback to malloc\n");
-		g_ctx.stream_buf_vir = malloc(g_ctx.stream_buf_size);
-		g_ctx.stream_buf_phy = 0;
-		if (!g_ctx.stream_buf_vir)
-			return -1;
-	}
 
 	pthread_mutex_init(&g_ctx.rect_mutex, NULL);
 	pthread_mutex_init(&g_ctx.g2d_use_mutex, NULL);
@@ -938,82 +1086,14 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	queue_inited = 1;
 	fq_init();
 	fq_inited = 1;
+	if (ffmpeg_pool_init(session_width, session_height) != 0)
+		goto err_cleanup;
+	ffmpeg_pool_inited = 1;
+	g_ffmpeg_pool_running = 1;
+	if (carplay_ffmpeg_decoder_create(&g_ctx.ffmpeg_dec, session_width, session_height) != 0)
+		goto err_cleanup;
 
 	MPPCallbackInfo cb_empty = { 0 };
-
-	memset(&vdec_attr, 0, sizeof(vdec_attr));
-	vdec_attr.mType = PT_H264;
-	vdec_attr.mOutputPixelFormat = MM_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
-	vdec_attr.mBufSize = (unsigned int)(4 * 1024 * 1024);
-	vdec_attr.mPicWidth  = (unsigned int)session_width;
-	vdec_attr.mPicHeight = (unsigned int)session_height;
-	vdec_attr.mVdecVideoAttr.mMode = VIDEO_MODE_STREAM;
-	// vdec_attr.mVdecVideoAttr.mMode = VIDEO_MODE_FRAME;
-	ret = AW_MPI_VDEC_CreateChn(g_ctx.vdec_chn, &vdec_attr);
-	if (ret != SUCCESS && ret != ERR_VDEC_EXIST) {
-		if (g_ctx.stream_buf_phy)
-			AW_MPI_SYS_MmzFree(g_ctx.stream_buf_phy, g_ctx.stream_buf_vir);
-		else
-			free(g_ctx.stream_buf_vir);
-		if (fq_inited)
-			fq_destroy();
-		if (queue_inited)
-			queue_destroy();
-		return -1;
-	}
-	AW_MPI_VDEC_RegisterCallback(g_ctx.vdec_chn, &cb_empty);
-
-	set_stream_info = cpd_env_int("CP_VDEC_SET_STREAM_INFO", 1) ? 1 : 0;
-	force_frame_package = cpd_env_int("CP_VDEC_FORCE_FRAME_PACKAGE", 0) ? 1 : 0;
-	session_fps = cpd_guess_session_fps();
-	ve_freq_set = cpd_env_opt_int("CP_VDEC_VE_FREQ", &ve_freq);
-	if (!ve_freq_set) {
-		// ve_freq = 480;
-		ve_freq = 600;
-		ve_freq_set = 1;
-	}
-
-	printf("[carplay_display] vdec_tuning_cfg set_stream_info=%d force_frame_package=%d session_fps=%d ve_freq=%d\n",
-	       set_stream_info, force_frame_package, session_fps, ve_freq);
-
-	if (set_stream_info) {
-		memset(&stream_info, 0, sizeof(stream_info));
-		stream_info.eCodecFormat = VIDEO_CODEC_FORMAT_H264;
-		stream_info.nWidth = session_width;
-		stream_info.nHeight = session_height;
-		stream_info.nFrameRate = session_fps;
-		stream_info.nFrameDuration = 0;
-		stream_info.bIsFramePackage = force_frame_package ? 1 : 0;
-		tune_ret = AW_MPI_VDEC_SetVideoStreamInfo(g_ctx.vdec_chn, &stream_info);
-		if (tune_ret != SUCCESS) {
-			printf("[carplay_display] AW_MPI_VDEC_SetVideoStreamInfo failed ret=%d\n", tune_ret);
-		} else {
-			printf("[carplay_display] AW_MPI_VDEC_SetVideoStreamInfo ok %dx%d fps=%d frame_pkg=%d\n",
-			       stream_info.nWidth, stream_info.nHeight, stream_info.nFrameRate, stream_info.bIsFramePackage);
-		}
-	}
-
-	if (force_frame_package) {
-		tune_ret = AW_MPI_VDEC_ForceFramePackage(g_ctx.vdec_chn, TRUE);
-		if (tune_ret != SUCCESS)
-			printf("[carplay_display] AW_MPI_VDEC_ForceFramePackage failed ret=%d\n", tune_ret);
-		else
-			printf("[carplay_display] AW_MPI_VDEC_ForceFramePackage enabled\n");
-	}
-
-	if (ve_freq_set) {
-		if (ve_freq < 0 || ve_freq > 2000) {
-			printf("[carplay_display] ignore invalid CP_VDEC_VE_FREQ=%d\n", ve_freq);
-		} else {
-			tune_ret = AW_MPI_VDEC_SetVEFreq(MM_INVALID_CHN, ve_freq);
-			if (tune_ret != SUCCESS)
-				printf("[carplay_display] AW_MPI_VDEC_SetVEFreq failed ret=%d freq=%d\n", tune_ret, ve_freq);
-			else
-				printf("[carplay_display] AW_MPI_VDEC_SetVEFreq ok freq=%d\n", ve_freq);
-		}
-	}
-
-	AW_MPI_VDEC_StartRecvStream(g_ctx.vdec_chn);
 
 	AW_MPI_VO_Enable(g_ctx.vo_dev);
 	AW_MPI_VO_AddOutsideVideoLayer(1);
@@ -1094,12 +1174,14 @@ err_cleanup:
 	AW_MPI_VO_DisableVideoLayer(g_ctx.vo_layer);
 	AW_MPI_VO_RemoveOutsideVideoLayer(1);
 	AW_MPI_VO_Disable(g_ctx.vo_dev);
-	AW_MPI_VDEC_StopRecvStream(g_ctx.vdec_chn);
-	AW_MPI_VDEC_DestroyChn(g_ctx.vdec_chn);
-	if (g_ctx.stream_buf_phy)
-		AW_MPI_SYS_MmzFree(g_ctx.stream_buf_phy, g_ctx.stream_buf_vir);
-	else
-		free(g_ctx.stream_buf_vir);
+	g_ffmpeg_pool_running = 0;
+	pthread_mutex_lock(&g_ffmpeg_pool_sync.mutex);
+	pthread_cond_broadcast(&g_ffmpeg_pool_sync.cond);
+	pthread_mutex_unlock(&g_ffmpeg_pool_sync.mutex);
+	carplay_ffmpeg_decoder_destroy(g_ctx.ffmpeg_dec);
+	g_ctx.ffmpeg_dec = NULL;
+	if (ffmpeg_pool_inited)
+		ffmpeg_pool_destroy();
 	return -1;
 }
 
@@ -1136,6 +1218,10 @@ void carplay_display_destroy(void)
 	if (!g_ctx.running)
 		return;
 	g_ctx.running = 0;
+	g_ffmpeg_pool_running = 0;
+	pthread_mutex_lock(&g_ffmpeg_pool_sync.mutex);
+	pthread_cond_broadcast(&g_ffmpeg_pool_sync.cond);
+	pthread_mutex_unlock(&g_ffmpeg_pool_sync.mutex);
 
 	/* Wake display thread if it's waiting for VO buffer release. */
 	pthread_mutex_lock(&g_ctx.g2d_use_mutex);
@@ -1156,7 +1242,7 @@ void carplay_display_destroy(void)
 		VIDEO_FRAME_INFO_S old = g_fq.slot[g_fq.head];
 		g_fq.head = (g_fq.head + 1) % FRAME_QUEUE_CAP;
 		g_fq.count--;
-		AW_MPI_VDEC_ReleaseImage(g_ctx.vdec_chn, &old);
+		ffmpeg_pool_release(&old);
 	}
 	pthread_mutex_unlock(&g_fq.mutex);
 	fq_destroy();
@@ -1168,16 +1254,13 @@ void carplay_display_destroy(void)
 	AW_MPI_VO_DisableVideoLayer(g_ctx.vo_layer);
 	AW_MPI_VO_RemoveOutsideVideoLayer(1);
 	AW_MPI_VO_Disable(g_ctx.vo_dev);
-	AW_MPI_VDEC_StopRecvStream(g_ctx.vdec_chn);
-	AW_MPI_VDEC_DestroyChn(g_ctx.vdec_chn);
+	carplay_ffmpeg_decoder_flush(g_ctx.ffmpeg_dec);
+	carplay_ffmpeg_decoder_destroy(g_ctx.ffmpeg_dec);
+	g_ctx.ffmpeg_dec = NULL;
 
 	g2d_free_dst();
+	ffmpeg_pool_destroy();
 
-	if (g_ctx.stream_buf_phy)
-		AW_MPI_SYS_MmzFree(g_ctx.stream_buf_phy, g_ctx.stream_buf_vir);
-	else
-		free(g_ctx.stream_buf_vir);
-	g_ctx.stream_buf_vir = NULL;
 	g_ctx.session_width = g_ctx.session_height = 0;
 	pthread_mutex_destroy(&g_ctx.rect_mutex);
 	pthread_mutex_destroy(&g_ctx.g2d_use_mutex);
