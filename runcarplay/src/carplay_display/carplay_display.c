@@ -61,8 +61,8 @@ static struct {
 } g_queue;
 
 #define FRAME_QUEUE_CAP 8
-#define FFMPEG_FRAME_POOL_CAP 6
-#define DECODE_DROP_FQ_BACKLOG 2
+#define FFMPEG_FRAME_POOL_CAP 10
+#define DECODE_DROP_FQ_BACKLOG 1
 #define DECODE_DROP_H264Q_BACKLOG 24
 #define CPD_PERF_PERIOD_US (3 * 1000000LL)
 
@@ -233,10 +233,18 @@ static int ffmpeg_frame_to_vo_frame(const carplay_ffmpeg_frame_t *src, VIDEO_FRA
 	dst->VFrame.mOffsetLeft = 0;
 	dst->VFrame.mOffsetRight = w;
 
-	for (int r = 0; r < h; r++)
-		memcpy(dst_y + (size_t)r * w, src_y + (size_t)r * src->linesize[0], (size_t)w);
-	for (int r = 0; r < uv_h; r++)
-		memcpy(dst_vu + (size_t)r * w, src_vu + (size_t)r * src->linesize[1], (size_t)w);
+	if (src->linesize[0] == w) {
+		memcpy(dst_y, src_y, (size_t)w * h);
+	} else {
+		for (int r = 0; r < h; r++)
+			memcpy(dst_y + (size_t)r * w, src_y + (size_t)r * src->linesize[0], (size_t)w);
+	}
+	if (src->linesize[1] == w) {
+		memcpy(dst_vu, src_vu, (size_t)w * uv_h);
+	} else {
+		for (int r = 0; r < uv_h; r++)
+			memcpy(dst_vu + (size_t)r * w, src_vu + (size_t)r * src->linesize[1], (size_t)w);
+	}
 
 	AW_MPI_SYS_MmzFlushCache(dst->VFrame.mPhyAddr[0], dst->VFrame.mpVirAddr[0], w * h);
 	AW_MPI_SYS_MmzFlushCache(dst->VFrame.mPhyAddr[1], dst->VFrame.mpVirAddr[1], w * uv_h);
@@ -280,6 +288,7 @@ static struct {
 	unsigned long long dec_out;
 	unsigned long long dec_drop_bp;
 	unsigned long long dec_drop_nonkey;
+	unsigned long long dec_drop_touch;
 	unsigned long long disp;
 	unsigned long long fq_drop;
 	unsigned long long h264_evict;
@@ -317,9 +326,9 @@ static void cpd_perf_maybe_print(void)
 	unsigned long long g2d_avg = g_pstat.disp > 0 ? g_pstat.g2d_total_us / g_pstat.disp : 0;
 	unsigned long long vo_avg = g_pstat.disp > 0 ? g_pstat.vo_total_us / g_pstat.disp : 0;
 	unsigned long long send_avg = g_pstat.dec_in > 0 ? g_pstat.send_total_us / g_pstat.dec_in : 0;
-	printf("[carplay_perf] period=%lldms dec_in=%llu dec_out=%llu dec_drop_bp=%llu dec_drop_nonkey=%llu disp=%llu fq_drop=%llu fq_skip=%llu h264_evict=%llu h264_drop=%llu send_fail=%llu send_avg_us=%llu g2d_avg_us=%llu vo_avg_us=%llu pool_wait_max_us=%llu\n",
+	printf("[carplay_perf] period=%lldms dec_in=%llu dec_out=%llu dec_drop_bp=%llu dec_drop_nonkey=%llu dec_drop_touch=%llu disp=%llu fq_drop=%llu fq_skip=%llu h264_evict=%llu h264_drop=%llu send_fail=%llu send_avg_us=%llu g2d_avg_us=%llu vo_avg_us=%llu pool_wait_max_us=%llu\n",
 	       elapsed / 1000LL,
-	       g_pstat.dec_in, g_pstat.dec_out, g_pstat.dec_drop_bp, g_pstat.dec_drop_nonkey, g_pstat.disp,
+	       g_pstat.dec_in, g_pstat.dec_out, g_pstat.dec_drop_bp, g_pstat.dec_drop_nonkey, g_pstat.dec_drop_touch, g_pstat.disp,
 	       g_pstat.fq_drop, g_pstat.disp_fq_skip,
 	       g_pstat.h264_evict, g_pstat.h264_drop, g_pstat.send_fail,
 	       send_avg, g2d_avg, vo_avg, g_pstat.pool_wait_max_us);
@@ -826,6 +835,11 @@ static void *decode_thread_fn(void *arg)
 			pthread_mutex_lock(&g_fq.mutex);
 			int fq_backlog = g_fq.count;
 			pthread_mutex_unlock(&g_fq.mutex);
+			if (carplay_touch_screen_down && fq_backlog >= 1) {
+				/* Touch interaction: favor latest frame for better perceived follow. */
+				g_pstat.dec_drop_touch++;
+				continue;
+			}
 			if (fq_backlog >= DECODE_DROP_FQ_BACKLOG) {
 				/* Keep real-time smoothness under CPU pressure. */
 				g_pstat.dec_drop_bp++;

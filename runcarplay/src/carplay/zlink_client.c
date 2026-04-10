@@ -24,7 +24,8 @@
 extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
-static int g_session_fps = 20;
+/* Lower default fps for softer CPU load and better touch responsiveness. */
+static int g_session_fps = 12;
 
 #define PREBUF_PACKET_CAP  24
 #define PREBUF_PACKET_MAX  (256 * 1024)
@@ -189,7 +190,7 @@ static void zlink_load_session_tuning(void)
 	const char *fps = getenv("ZLINK_SESSION_FPS");
 	if (fps && fps[0] != '\0') {
 		int v = atoi(fps);
-		if (v >= 15 && v <= 30)
+		if (v >= 12 && v <= 30)
 			g_session_fps = v;
 	}
 	printf("zlink session tuning: fps=%d\n", g_session_fps);
