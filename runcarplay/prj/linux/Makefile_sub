@@ -32,6 +32,11 @@ CFLAGS :=   -Wall -O3 -g0 -pipe -fpermissive -Wno-unused-local-typedefs \
 ifneq ($(CONFIG_CARPLAY),0)
 CFLAGS += -DENABLE_CARPLAY=1
 endif
+ifeq ($(CONFIG_CARPLAY_DECODER),aw)
+CFLAGS += -DCP_USE_FFMPEG_DECODER=0
+else
+CFLAGS += -DCP_USE_FFMPEG_DECODER=1
+endif
 
 #  -O1 -g -fno-omit-frame-pointer \ -O3 -g0 
 
@@ -42,6 +47,11 @@ CPPFLAGS := -Wall -O3 -g0 -pipe -fpermissive -Wno-unused-local-typedefs \
 		 $(CPPFLAGS)
 ifneq ($(CONFIG_CARPLAY),0)
 CPPFLAGS += -DENABLE_CARPLAY=1
+endif
+ifeq ($(CONFIG_CARPLAY_DECODER),aw)
+CPPFLAGS += -DCP_USE_FFMPEG_DECODER=0
+else
+CPPFLAGS += -DCP_USE_FFMPEG_DECODER=1
 endif
 
 # ֻ����CEDAR_INC�е�ͷ�ļ�·�������������е�Դ�ļ�
@@ -120,7 +130,7 @@ LIBSA +=  -ldl -lrt -lpthread -lm -lc -lz  -fPIC -Wall -Wno-unused-but-set-varia
 -lisp_iso -lz -lmotion -lglog -llog -lcdx_stream -lFsWriter -lAgc \
 -lcdx_id3v2_parser -lcdx_amr_parser -lisp_rolloff -lawaiisp \
 -lunwind -lasound -llua -luapi -lpng -lluaconfig \
--lavcodec -lavutil \
+$(if $(filter aw,$(CONFIG_CARPLAY_DECODER)),,-lavcodec -lavutil) \
 $(if $(filter 0,$(CONFIG_CARPLAY)),,-lzlink)	\
 -llvgl 	\
     	-Wl,--end-group
@@ -181,7 +191,7 @@ $(CPPOBJS) : $(OBJROOTDIR)%.o:$(SRCDIR)%.cpp
 	$(CPP) -c $< -o $@  $(CPPFLAGS) $(CEDAR_INC) $(SRCINC)
 
 ifneq ($(CONFIG_CARPLAY),0)
-CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(OBJROOTDIR)/carplay_display/carplay_ffmpeg_decoder.o $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
+CARPLAY_OBJS = $(OBJROOTDIR)/carplay/zlink_client.o $(OBJROOTDIR)/carplay_display/carplay_display.o $(if $(filter aw,$(CONFIG_CARPLAY_DECODER)),,$(OBJROOTDIR)/carplay_display/carplay_ffmpeg_decoder.o) $(OBJROOTDIR)/carplay_display/link_touch_evdev.o
 $(OBJROOTDIR)/carplay/zlink_client.o: $(SRCDIR)/carplay/zlink_client.c
 	@mkdir -p $(OBJROOTDIR)/carplay
 	$(CC) -c $< -o $@ $(CFLAGS) $(CEDAR_INC) $(SRCINC)

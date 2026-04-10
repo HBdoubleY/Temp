@@ -2,6 +2,8 @@ PWD=$(shell pwd)
 
 # CarPlay/Android Auto: 1=enable, 0=disable
 CONFIG_CARPLAY ?= 1
+# CarPlay decoder backend: ffmpeg or aw
+CONFIG_CARPLAY_DECODER ?= aw
 
 #�����ļ�����
 BIN = runcarplay
