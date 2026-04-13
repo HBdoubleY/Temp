@@ -657,8 +657,8 @@ static void lvgl_handle_zlink_ui_requests(void)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t0_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_begin sid=%u recorderMode=%d rec0_flag=%d rec8_flag=%d\n",
-                   t0_us, sid, g_sys_Data.recorderMode,
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_begin sid=%u recorderMode=%d rec0_flag=%d rec8_flag=%d\n", \
+                   t0_us, sid, g_sys_Data.recorderMode, \
                    g_sys_Data.vipp0_config.mRecorderFlag, g_sys_Data.vipp8_config.mRecorderFlag);
         }
         zlink_client_perf_set_session_id(sid);
@@ -668,7 +668,7 @@ static void lvgl_handle_zlink_ui_requests(void)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t1_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=reset_prebuffer cost_us=%lld\n",
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=reset_prebuffer cost_us=%lld\n", \
                    t1_us, sid, t1_us - t0_us);
         }
         zlink_client_request_video_focus(1);
@@ -677,17 +677,18 @@ static void lvgl_handle_zlink_ui_requests(void)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t2_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=focus_hu_and_ctrl_off cost_us=%lld\n",
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=focus_hu_and_ctrl_off cost_us=%lld\n", \
                    t2_us, sid, t2_us - t1_us);
         }
         int disp_w = 720;
         int disp_h = 1440;
-        int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        // int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        int cr = carplay_display_create(0, 0, disp_w, disp_h, 960, 480);
         if (zlink_client_perf_is_enabled()) {
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t3_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=carplay_display_create ret=%d cost_us=%lld\n",
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=carplay_display_create ret=%d cost_us=%lld\n", \
                    t3_us, sid, cr, t3_us - t2_us);
         }
         zlink_client_set_video_active(1);
@@ -697,7 +698,7 @@ static void lvgl_handle_zlink_ui_requests(void)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t4_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=active_and_focus_phone cost_us=%lld\n",
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=active_and_focus_phone cost_us=%lld\n", \
                    t4_us, sid, t4_us - t3_us);
         }
         ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
@@ -707,7 +708,7 @@ static void lvgl_handle_zlink_ui_requests(void)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             t5_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=ui_load_scr_animation cost_us=%lld\n",
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=ui_load_scr_animation cost_us=%lld\n", \
                    t5_us, sid, t5_us - t4_us);
         }
         if (cr == 0) {
@@ -719,7 +720,7 @@ static void lvgl_handle_zlink_ui_requests(void)
                 long long t6_us;
                 gettimeofday(&tv, NULL);
                 t6_us = (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-                printf("[cp_perf] ts_us=%lld stage=enter_carplay_done sid=%u total_us=%lld\n",
+                printf("[cp_perf] ts_us=%lld stage=enter_carplay_done sid=%u total_us=%lld\n", \
                        t6_us, sid, t6_us - t0_us);
             }
         } else {
@@ -732,7 +733,8 @@ static void lvgl_handle_zlink_ui_requests(void)
         REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 0);
         int disp_w = 720;
         int disp_h = 1440;
-        int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        // int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+        int cr = carplay_display_create(0, 0, disp_w, disp_h, 960, 480);
         zlink_client_set_video_active(1);
         zlink_client_request_video_focus(0);
         REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 1);

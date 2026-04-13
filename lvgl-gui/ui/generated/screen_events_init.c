@@ -140,7 +140,7 @@ static void screen_btn_carplay_event_handler (lv_event_t *e)
 			request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
 			int disp_w = 720;
 			int disp_h = 1440;
-			projection_ok = (carplay_display_create(0, 0, disp_w, disp_h, 1440, 720) == 0);
+			projection_ok = (carplay_display_create(0, 0, disp_w, disp_h, 960, 480) == 0);
 			zlink_client_set_video_active(1);
 			zlink_client_request_video_focus(0);
 			request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
@@ -178,7 +178,7 @@ static void screen_btn_androidauto_event_handler(lv_event_t *e){
 			request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
 			int disp_w = 720;
 			int disp_h = 1440;
-			projection_ok_aa = (carplay_display_create(0, 0, disp_w, disp_h, 1440, 720) == 0);
+			projection_ok_aa = (carplay_display_create(0, 0, disp_w, disp_h, 960, 480) == 0);
 			zlink_client_set_video_active(1);
 			zlink_client_request_video_focus(0);
 			request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);

@@ -25,7 +25,7 @@ extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
 /* Lower default fps for softer CPU load and better touch responsiveness. */
-static int g_session_fps = 25;
+static int g_session_fps = 15;
 static int g_session_width = 960;
 static int g_session_height = 480;
 static int g_session_fallback_w[3] = {960, 1440, 0};

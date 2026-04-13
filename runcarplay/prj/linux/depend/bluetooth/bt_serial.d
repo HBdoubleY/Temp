@@ -1,4 +1,0 @@
-obj//home/hyby/Desktop/myShare/Temp/Temp/runcarplay/prj/linux/../../src/bluetooth/bt_serial.o depend/bluetooth/bt_serial.d : \
- /home/hyby/Desktop/myShare/Temp/Temp/runcarplay/prj/linux/../../src/bluetooth/bt_serial.c \
- /home/hyby/Desktop/myShare/Temp/Temp/runcarplay/prj/linux/../../src/bluetooth/bt_serial.h \
- /home/hyby/Desktop/myShare/Temp/Temp/runcarplay/prj/linux/../../src/bluetooth/../tire/tire_manager.h
