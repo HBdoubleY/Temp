@@ -2,6 +2,7 @@
 
 #include "link_touch_evdev.h"
 #include "carplay_display.h"
+#include "zlink_client.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,11 +16,6 @@
 #include <sys/time.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-
-extern unsigned int zlink_client_perf_get_session_id(void);
-extern int zlink_client_perf_is_enabled(void);
-extern int zlink_client_perf_sample_n(void);
-extern int zlink_client_perf_warn_us(void);
 
 /* Match lv_drv_conf / evdev.c defaults (no lv_drv_conf include in runcarplay). */
 #include "carplay_thread_prio.h"
@@ -73,6 +69,18 @@ static long long g_batch_first_event_us;
 static long long g_last_poll_wakeup_us;
 static long long g_last_touch_emit_us;
 
+#if CP_PERF_COMPILE
+#define CPT_PERF_ENABLED() zlink_client_perf_is_enabled()
+#define CPT_PERF_SAMPLE_N() zlink_client_perf_sample_n()
+#define CPT_PERF_WARN_US() zlink_client_perf_warn_us()
+#define CPT_PERF_SESSION_ID() zlink_client_perf_get_session_id()
+#else
+#define CPT_PERF_ENABLED() 0
+#define CPT_PERF_SAMPLE_N() 1
+#define CPT_PERF_WARN_US() 20000
+#define CPT_PERF_SESSION_ID() 0U
+#endif
+
 static long long link_touch_now_us(void)
 {
 	struct timeval tv;
@@ -80,16 +88,18 @@ static long long link_touch_now_us(void)
 	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
 }
 
+#if CP_PERF_COMPILE
 static long long link_touch_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
 }
+#endif
 
 #define CPT_LOG(stage, fmt, ...) \
 	do { \
-		if (zlink_client_perf_is_enabled()) { \
+		if (CPT_PERF_ENABLED()) { \
 			printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=%u " fmt "\n", \
-			       link_touch_now_us(), link_touch_tid(), stage, zlink_client_perf_get_session_id(), ##__VA_ARGS__); \
+			       link_touch_now_us(), link_touch_tid(), stage, CPT_PERF_SESSION_ID(), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
@@ -328,7 +338,7 @@ static void run_emit_after_batch(void)
 	emit_link_touch_locked(out_x, out_y, current_state);
 	pthread_mutex_unlock(&g_touch_mutex);
 	long long now_us = link_touch_now_us();
-	if ((g_touch_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL && g_batch_first_event_us > 0) {
+	if ((g_touch_seq % (unsigned long long)CPT_PERF_SAMPLE_N()) == 0ULL && g_batch_first_event_us > 0) {
 		long long pipeline_us = now_us - g_batch_first_event_us;
 		long long emit_interval_us = (g_last_touch_emit_us > 0) ? (now_us - g_last_touch_emit_us) : 0;
 		CPT_LOG("touch_emit", "seq=%llu state=%d x=%d y=%d pipeline_us=%lld noise_rel=%llu move_suppress=%llu",
@@ -358,9 +368,9 @@ static void *link_touch_thread_fn(void *arg)
 		long long poll_start_us = link_touch_now_us();
 		int pr = poll(&pfd, 1, -1);
 		long long poll_wakeup_us = link_touch_now_us();
-		if (g_last_poll_wakeup_us > 0 && zlink_client_perf_is_enabled()) {
+		if (g_last_poll_wakeup_us > 0 && CPT_PERF_ENABLED()) {
 			long long interval = poll_wakeup_us - g_last_poll_wakeup_us;
-			if (interval > (long long)zlink_client_perf_warn_us()) {
+			if (interval > (long long)CPT_PERF_WARN_US()) {
 				CPT_LOG("touch_poll_gap_warn", "interval_us=%lld", interval);
 			}
 		}
@@ -400,7 +410,7 @@ static void *link_touch_thread_fn(void *arg)
 				perror("link_touch: read");
 			break;
 		}
-		if (zlink_client_perf_is_enabled() && batch_events > 0) {
+		if (CPT_PERF_ENABLED() && batch_events > 0) {
 			long long loop_cost = link_touch_now_us() - poll_start_us;
 			CPT_LOG("touch_batch", "events=%d emits=%d read_loop_cost_us=%lld", batch_events, emit_count, loop_cost);
 		}

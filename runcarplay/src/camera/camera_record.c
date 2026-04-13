@@ -311,7 +311,7 @@ static int camera_record_start_channel(camera_record_channel_t *ch, const char *
 
     memset(&recv_param, 0, sizeof(recv_param));
     recv_param.mRecvPicNum = -1;
-    AW_MPI_VENC_StartRecvPic(ch->venc_chn, &recv_param);
+    AW_MPI_VENC_StartRecvPicEx(ch->venc_chn, &recv_param);
     AW_MPI_MUX_StartGrp(ch->mux_chn);
 
     pthread_create(&ch->producer_tid, NULL, camera_record_producer, ch);

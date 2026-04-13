@@ -65,11 +65,13 @@ static struct {
 
 static int g_last_focus_req = -1;
 static long long g_last_focus_req_ms = 0;
+#if CP_PERF_COMPILE
 static unsigned int g_perf_session_id = 0;
 static int g_perf_enable = -1;
 static int g_perf_deep = -1;
 static int g_perf_sample_n = -1;
 static int g_perf_warn_us = -1;
+#endif
 
 static long long zlink_now_us(void)
 {
@@ -78,10 +80,12 @@ static long long zlink_now_us(void)
 	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
 }
 
+#if CP_PERF_COMPILE
 static long long zlink_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
 }
+#endif
 
 static int zlink_env_int(const char *key, int def)
 {
@@ -91,6 +95,7 @@ static int zlink_env_int(const char *key, int def)
 	return atoi(s);
 }
 
+#if CP_PERF_COMPILE
 static void zlink_perf_init_once(void)
 {
 	if (g_perf_enable >= 0)
@@ -109,6 +114,8 @@ static void zlink_perf_init_once(void)
 		       g_perf_enable, g_perf_deep, g_perf_sample_n, g_perf_warn_us);
 }
 
+#define ZLINK_PERF_SAMPLE_N() zlink_client_perf_sample_n()
+#define ZLINK_PERF_WARN_US() zlink_client_perf_warn_us()
 #define CP_PERF_LOG(stage, fmt, ...) \
 	do { \
 		zlink_perf_init_once(); \
@@ -117,6 +124,11 @@ static void zlink_perf_init_once(void)
 			       zlink_now_us(), zlink_tid(), stage, g_perf_session_id, ##__VA_ARGS__); \
 		} \
 	} while (0)
+#else
+#define ZLINK_PERF_SAMPLE_N() 1
+#define ZLINK_PERF_WARN_US() 20000
+#define CP_PERF_LOG(stage, fmt, ...) do { (void)(stage); } while (0)
+#endif
 
 static long long zlink_now_ms(void)
 {
@@ -305,7 +317,7 @@ static int video_data_cb(char *data, int len, struct VIDEO_SCREEN_INFO *info, vo
 		window_bytes += (unsigned long long)len;
 		if (window_start_us == 0)
 			window_start_us = cb_start_us;
-		if ((my_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		if ((my_seq % (unsigned long long)ZLINK_PERF_SAMPLE_N()) == 0ULL) {
 			long long cb_cost_us = zlink_now_us() - cb_start_us;
 			CP_PERF_LOG("video_data_cb",
 			            "pkt_seq=%llu len=%d active=%d prebuf_count=%d feed_ret=%d cb_cost_us=%lld",
@@ -532,7 +544,7 @@ int zlink_client_request_video_focus(int is_hu_focus_on)
 	long long t0 = zlink_now_us();
 	int ret = libzlink_video_focus(is_hu_focus_on ? 1 : 0);
 	long long cost = zlink_now_us() - t0;
-	if (cost > (long long)zlink_client_perf_warn_us()) {
+	if (cost > (long long)ZLINK_PERF_WARN_US()) {
 		CP_PERF_LOG("request_video_focus_slow", "focus=%d ret=%d cost_us=%lld",
 		            is_hu_focus_on, ret, cost);
 	} else {
@@ -610,30 +622,50 @@ void carplay_is_running2(void)
 
 void zlink_client_perf_set_session_id(unsigned int session_id)
 {
+#if CP_PERF_COMPILE
 	g_perf_session_id = session_id;
+#else
+	(void)session_id;
+#endif
 }
 
 unsigned int zlink_client_perf_get_session_id(void)
 {
+#if CP_PERF_COMPILE
 	return g_perf_session_id;
+#else
+	return 0U;
+#endif
 }
 
 int zlink_client_perf_is_enabled(void)
 {
+#if CP_PERF_COMPILE
 	zlink_perf_init_once();
 	return g_perf_enable;
+#else
+	return 0;
+#endif
 }
 
 int zlink_client_perf_sample_n(void)
 {
+#if CP_PERF_COMPILE
 	zlink_perf_init_once();
 	return g_perf_sample_n;
+#else
+	return 1;
+#endif
 }
 
 int zlink_client_perf_warn_us(void)
 {
+#if CP_PERF_COMPILE
 	zlink_perf_init_once();
 	return g_perf_warn_us;
+#else
+	return 20000;
+#endif
 }
 
 #endif /* ENABLE_CARPLAY */

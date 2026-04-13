@@ -119,8 +119,8 @@ int camera_capture_start(camera_capture_ctx_t *ctx)
         return -1;
     }
     memset(&recv_param, 0, sizeof(recv_param));
-    recv_param.mRecvPicNum = -1;
-    if (AW_MPI_VENC_StartRecvPic(ctx->venc_chn, &recv_param) != SUCCESS) {
+    recv_param.mRecvPicNum = 1;
+    if (AW_MPI_VENC_StartRecvPicEx(ctx->venc_chn, &recv_param) != SUCCESS) {
         return -1;
     }
     ctx->started = 1;

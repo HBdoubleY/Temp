@@ -9,6 +9,7 @@
 #include "carplay_ffmpeg_decoder.h"
 #endif
 #include "mpp_compat.h"
+#include "zlink_client.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -20,11 +21,6 @@
 #include <sys/syscall.h>
 #include <g2d_driver.h>
 #include <PIXEL_FORMAT_E_g2d_format_convert.h>
-
-extern unsigned int zlink_client_perf_get_session_id(void);
-extern int zlink_client_perf_is_enabled(void);
-extern int zlink_client_perf_sample_n(void);
-extern int zlink_client_perf_warn_us(void);
 
 extern int libzlink_touch_event(int x, int y, int is_touch_down);
 
@@ -73,6 +69,66 @@ static struct {
 #define DISPLAY_KEEP_FRAMES_TOUCH 2
 #define DISPLAY_DROP_THRESHOLD 5
 #define CPD_PERF_PERIOD_US (3 * 1000000LL)
+
+#if CP_PERF_COMPILE
+static unsigned int g_cp_perf_session_seq = 0;
+
+static long long cp_perf_now_us(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
+}
+
+#define CP_PERF_LOG_ENTER_BEGIN(ts_us, sid) \
+    do { \
+        if (zlink_client_perf_is_enabled()) { \
+            (ts_us) = cp_perf_now_us(); \
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_begin sid=%u recorderMode=%d rec0_flag=%d rec8_flag=%d\n", \
+                   (ts_us), (sid), g_sys_Data.recorderMode, \
+                   g_sys_Data.vipp0_config.mRecorderFlag, g_sys_Data.vipp8_config.mRecorderFlag); \
+        } \
+    } while (0)
+
+#define CP_PERF_LOG_ENTER_STEP(ts_us, sid, step_name, prev_ts_us) \
+    do { \
+        if (zlink_client_perf_is_enabled()) { \
+            (ts_us) = cp_perf_now_us(); \
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=%s cost_us=%lld\n", \
+                   (ts_us), (sid), (step_name), (ts_us) - (prev_ts_us)); \
+        } \
+    } while (0)
+
+#define CP_PERF_LOG_ENTER_CREATE(ts_us, sid, ret, prev_ts_us) \
+    do { \
+        if (zlink_client_perf_is_enabled()) { \
+            (ts_us) = cp_perf_now_us(); \
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_step sid=%u name=carplay_display_create ret=%d cost_us=%lld\n", \
+                   (ts_us), (sid), (ret), (ts_us) - (prev_ts_us)); \
+        } \
+    } while (0)
+
+#define CP_PERF_LOG_ENTER_DONE(sid, t0_us) \
+    do { \
+        if (zlink_client_perf_is_enabled()) { \
+            long long t6_us = cp_perf_now_us(); \
+            printf("[cp_perf] ts_us=%lld stage=enter_carplay_done sid=%u total_us=%lld\n", \
+                   t6_us, (sid), t6_us - (t0_us)); \
+        } \
+    } while (0)
+#endif
+
+#if CP_PERF_COMPILE
+#define CPD_PERF_ENABLED() zlink_client_perf_is_enabled()
+#define CPD_PERF_SAMPLE_N() zlink_client_perf_sample_n()
+#define CPD_PERF_WARN_US() zlink_client_perf_warn_us()
+#define CPD_PERF_SESSION_ID() zlink_client_perf_get_session_id()
+#else
+#define CPD_PERF_ENABLED() 0
+#define CPD_PERF_SAMPLE_N() 1
+#define CPD_PERF_WARN_US() 20000
+#define CPD_PERF_SESSION_ID() 0U
+#endif
 
 static struct {
 	unsigned int phy_addr[2];
@@ -327,10 +383,12 @@ static long long cp_now_us(void)
 	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
 }
 
+#if CP_PERF_COMPILE
 static long long cp_tid(void)
 {
 	return (long long)syscall(SYS_gettid);
 }
+#endif
 
 static int cpd_touch_recently_active(void)
 {
@@ -341,6 +399,7 @@ static int cpd_touch_recently_active(void)
 
 static void cpd_perf_maybe_print(void)
 {
+#if CP_PERF_COMPILE
 	long long now = cp_now_us();
 	if (g_pstat.last_print_us == 0) {
 		g_pstat.last_print_us = now;
@@ -360,6 +419,7 @@ static void cpd_perf_maybe_print(void)
 	       send_avg, g2d_avg, vo_avg, g_pstat.pool_wait_max_us);
 	memset(&g_pstat, 0, sizeof(g_pstat));
 	g_pstat.last_print_us = now;
+#endif
 }
 
 static int cpd_env_int(const char *key, int def)
@@ -456,9 +516,9 @@ static h264_nal_kind_t h264_classify_packet(const char *data, int len)
 
 #define CPD_LOG(stage, fmt, ...) \
 	do { \
-		if (zlink_client_perf_is_enabled()) { \
+		if (CPD_PERF_ENABLED()) { \
 			printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=%u " fmt "\n", \
-			       cp_now_us(), cp_tid(), stage, zlink_client_perf_get_session_id(), ##__VA_ARGS__); \
+			       cp_now_us(), cp_tid(), stage, CPD_PERF_SESSION_ID(), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
@@ -599,7 +659,7 @@ static int queue_push(const char *data, int len)
 	g_queue.tail = (g_queue.tail + 1) % H264_QUEUE_CAP;
 	g_queue.count++;
 	g_h264_seq++;
-	if ((g_h264_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+	if ((g_h264_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 		CPD_LOG("h264_queue_push", "seq=%llu q_count=%d len=%d kind=%s cost_us=%lld",
 		        g_h264_seq, g_queue.count, len, h264_nal_kind_str(kind), cp_now_us() - t0);
 	}
@@ -622,7 +682,7 @@ static int queue_pop(h264_packet_t *out)
 	g_queue.slot[g_queue.head].data = NULL;
 	g_queue.head = (g_queue.head + 1) % H264_QUEUE_CAP;
 	g_queue.count--;
-	if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+	if ((g_decode_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 		CPD_LOG("h264_queue_pop", "q_count=%d wait_us=%lld",
 		        g_queue.count, cp_now_us() - wait_start);
 	}
@@ -859,7 +919,7 @@ static void *decode_thread_fn(void *arg)
 			        g_decode_seq, pkt_len, send_ret, send_cost);
 			continue;
 		}
-		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		if ((g_decode_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 			CPD_LOG("decode_send", "seq=%llu len=%d cost_us=%lld",
 			        g_decode_seq, pkt_len, send_cost);
 		}
@@ -898,7 +958,7 @@ static void *decode_thread_fn(void *arg)
 			long long pool_wait_us = cp_now_us() - pool_wait_t0;
 			if ((unsigned long long)pool_wait_us > g_pstat.pool_wait_max_us)
 				g_pstat.pool_wait_max_us = (unsigned long long)pool_wait_us;
-			if (pool_wait_us > (long long)zlink_client_perf_warn_us()) {
+			if (pool_wait_us > (long long)CPD_PERF_WARN_US()) {
 				CPD_LOG("decode_pool_wait_slow", "wait_us=%lld", pool_wait_us);
 			}
 			if (ffmpeg_frame_to_vo_frame(&ff_frame, vo_frame) != 0) {
@@ -924,7 +984,7 @@ static void *decode_thread_fn(void *arg)
 		}
 
 		g_pstat.dec_out += (unsigned long long)frame_cnt;
-		if ((g_decode_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		if ((g_decode_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 			CPD_LOG("decode_get_image", "seq=%llu frames=%d fq_drop=%llu",
 			        g_decode_seq, frame_cnt, g_fq_drop);
 		}
@@ -965,7 +1025,7 @@ static void *decode_thread_fn(void *arg)
 			        g_decode_seq, stream.mLen, (unsigned int)send_ret, send_cost);
 			continue;
 		}
-		if (send_cost > (long long)zlink_client_perf_warn_us()) {
+		if (send_cost > (long long)CPD_PERF_WARN_US()) {
 			CPD_LOG("aw_send_stream_slow", "seq=%llu len=%u send_us=%lld",
 			        g_decode_seq, stream.mLen, send_cost);
 		}
@@ -1002,7 +1062,7 @@ static void *decode_thread_fn(void *arg)
 			pthread_mutex_unlock(&g_queue.mutex);
 			CPD_LOG("aw_decode_no_frame", "seq=%llu len=%u q_depth=%d send_us=%lld",
 			        g_decode_seq, stream.mLen, q_count, send_cost);
-		} else if (get_loop_us > (long long)zlink_client_perf_warn_us()) {
+		} else if (get_loop_us > (long long)CPD_PERF_WARN_US()) {
 			CPD_LOG("aw_get_image_slow", "seq=%llu frames=%d get_us=%lld",
 			        g_decode_seq, frame_cnt, get_loop_us);
 		}
@@ -1153,14 +1213,14 @@ static void *display_thread_fn(void *arg)
 			if (now_us >= g_last_touch_send_us)
 				touch_to_display_us = now_us - g_last_touch_send_us;
 		}
-		if (vo_cost > (long long)zlink_client_perf_warn_us()) {
+		if (vo_cost > (long long)CPD_PERF_WARN_US()) {
 			CPD_LOG("display_vo_send_slow", "vo_cost_us=%lld", vo_cost);
 		}
 		g_pstat.disp++;
 		g_pstat.g2d_total_us += (unsigned long long)(g2d_cost > 0 ? g2d_cost : 0);
 		g_pstat.vo_total_us += (unsigned long long)(vo_cost > 0 ? vo_cost : 0);
 		cpd_perf_maybe_print();
-		if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+		if ((g_frame_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 			CPD_LOG("display_frame", "fq_wait_us=%lld g2d_wait_us=%lld g2d_cost_us=%lld vo_cost_us=%lld g2d_ret=%d",
 			        fq_wait_us, g2d_wait_us, g2d_cost, vo_cost, g2d_ret);
 			if (touch_to_display_us > 0 && cpd_touch_recently_active()) {
@@ -1200,7 +1260,7 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 
 	libzlink_touch_event(session_x, session_y, is_touch_down);
 	g_last_touch_send_us = cp_now_us();
-	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+	if ((g_frame_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 		CPD_LOG("touch_map_send", "sx=%d sy=%d tx=%d ty=%d down=%d cost_us=%lld",
 		        screen_x, screen_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
 	}
@@ -1214,7 +1274,7 @@ static ERRORTYPE carplay_vo_callback(void *cookie, MPP_CHN_S *pChn, MPP_EVENT_TY
 		long long now_us = cp_now_us();
 		if (g_last_vo_release_us > 0) {
 			long long delta = now_us - g_last_vo_release_us;
-			if (delta > (long long)zlink_client_perf_warn_us()) {
+			if (delta > (long long)CPD_PERF_WARN_US()) {
 				CPD_LOG("vo_release_slow", "interval_us=%lld", delta);
 			}
 		}
@@ -1356,7 +1416,7 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 			goto err_cleanup;
 	}
 
-	AW_MPI_VO_SetChnFrameRate(g_ctx.vo_layer, g_ctx.vo_chn, 20);
+	// AW_MPI_VO_SetChnFrameRate(g_ctx.vo_layer, g_ctx.vo_chn, 20);
 
 	{
 		MPPCallbackInfo vo_cb;
@@ -1544,7 +1604,7 @@ void carplay_touch_send_xy(int screen_x, int screen_y, int is_touch_down)
 		pthread_cond_signal(&g_fq.cond);
 		pthread_mutex_unlock(&g_fq.mutex);
 	}
-	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
+	if ((g_frame_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 		CPD_LOG("touch_send_xy", "x=%d y=%d down=%d cost_us=%lld",
 		        screen_x, screen_y, is_touch_down, cp_now_us() - t0);
 	}

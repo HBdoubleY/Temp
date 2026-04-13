@@ -7,6 +7,14 @@ extern "C" {
 
 #include <stdbool.h>
 
+/*
+ * Compile-time switch for CarPlay performance instrumentation.
+ * Keep enabled by default to preserve current behavior.
+ */
+#ifndef CP_PERF_COMPILE
+#define CP_PERF_COMPILE 0
+#endif
+
 #ifdef ENABLE_CARPLAY
 
 /** Run zlink client loop (blocking). Call from a dedicated thread. Returns when init fails. */
