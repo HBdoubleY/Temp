@@ -1054,10 +1054,38 @@ static void *display_thread_fn(void *arg)
 		if (!got)
 			continue;
 
+#define TARGET_WIDTH  960
+#define TARGET_HEIGHT 480
+		
+		int src_w = frame.VFrame.mWidth;
+		int src_h = frame.VFrame.mHeight;
+		
+		// 如果输入大于目标尺寸，自动居中裁剪
+		if (src_w > TARGET_WIDTH || src_h > TARGET_HEIGHT) {
+			int crop_x = (src_w - TARGET_WIDTH) / 2;
+			int crop_y = (src_h - TARGET_HEIGHT) / 2 - 9;
+			
+			frame.VFrame.mOffsetLeft   = crop_x;
+			frame.VFrame.mOffsetRight  = crop_x + TARGET_WIDTH;
+			frame.VFrame.mOffsetTop    = crop_y;
+			frame.VFrame.mOffsetBottom = crop_y + TARGET_HEIGHT;
+			
+			src_w = TARGET_WIDTH;
+			src_h = TARGET_HEIGHT;
+		} else {
+			// 小于或等于目标尺寸，不裁剪（或按需全图显示）
+			frame.VFrame.mOffsetLeft   = 0;
+			frame.VFrame.mOffsetRight  = src_w;
+			frame.VFrame.mOffsetTop    = 0;
+			frame.VFrame.mOffsetBottom = src_h;
+		}
+		
 		{
 			/* Rotate 270: output geometry becomes src_h x src_w. */
-			int dst_w = frame.VFrame.mHeight;
-			int dst_h = frame.VFrame.mWidth;
+			// int dst_w = frame.VFrame.mHeight;
+			// int dst_h = frame.VFrame.mWidth;
+			int dst_w = src_h;
+			int dst_h = src_w;
 			int did_alloc = 0;
 			if (dst_w <= 0 || dst_h <= 0) {
 				dst_w = g_ctx.disp_width;
@@ -1306,7 +1334,23 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	layer_attr.stDispRect.Height = g_ctx.disp_height;
 	AW_MPI_VO_SetVideoLayerAttr(g_ctx.vo_layer, &layer_attr);
 
-	AW_MPI_VO_CreateChn(g_ctx.vo_layer, g_ctx.vo_chn);
+	{
+		BOOL vo_chn_created = FALSE;
+		while (g_ctx.vo_chn < VO_MAX_CHN_NUM) {
+			ERRORTYPE vo_ret = AW_MPI_VO_CreateChn(g_ctx.vo_layer, g_ctx.vo_chn);
+			if (vo_ret == SUCCESS) {
+				vo_chn_created = TRUE;
+				break;
+			}
+			if (vo_ret == ERR_VO_CHN_NOT_DISABLE) {
+				g_ctx.vo_chn++;
+				continue;
+			}
+			goto err_cleanup;
+		}
+		if (!vo_chn_created)
+			goto err_cleanup;
+	}
 	{
 		MPPCallbackInfo vo_cb;
 		vo_cb.cookie = NULL;

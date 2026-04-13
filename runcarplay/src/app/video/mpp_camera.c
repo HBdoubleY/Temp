@@ -409,26 +409,19 @@ static int G2D_Convert_Scale(VIDEO_FRAME_INFO_S *src ,VIDEO_FRAME_INFO_S *dst){
 static void *Vi2VencFrameThread(void *pThreadData)
 {
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
-
     int ret = 0;
     mpp_cp_perf_stat_t stat;
     memset(&stat, 0, sizeof(stat));
     
     // 1. 创建双缓冲避免竞争
-
-    
     while (pContext->mExitFlag == 0)
     {
-
-        
         if (pContext->mRecorderFlag) {
             if (queue_mpp_empty(pContext->m_vo.mppQueue)) {
                 usleep(1000); // 缩短休眠时间
                 continue;
             }
-            
             VIDEO_FRAME_INFO_S *FrameInfo = (VIDEO_FRAME_INFO_S *)queue_mpp_pop(pContext->m_vo.mppQueue);
-        
 #ifdef TACKPIC        
         if(pContext->mTakePicFlag){
             ret = AW_MPI_VENC_SendFrame(pContext->m_venc_pic.mVEncChn, FrameInfo, 0);
@@ -440,7 +433,6 @@ static void *Vi2VencFrameThread(void *pThreadData)
             pContext->mTakePicFlag = 0;
         }
 #endif  
-
             long long venc_t0 = monotonic_us_now();
             ret = AW_MPI_VENC_SendFrame(pContext->m_venc.mVEncChn, FrameInfo, 0);
             long long venc_cost = monotonic_us_now() - venc_t0;
@@ -454,16 +446,11 @@ static void *Vi2VencFrameThread(void *pThreadData)
                 stat.venc_fail++;
                 printf("fatal error, venc send frame sync failed!\n");
             }
-            
-            
         } else {
             usleep(1000000); // 1000ms
         }
         mpp_cp_stat_flush("mpp_venc_thread", &stat);
-        
     }
-    
-  
     return NULL;
 }
 #else

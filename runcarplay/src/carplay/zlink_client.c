@@ -25,7 +25,7 @@ extern struct { int linktype; } g_sys_Data;
 
 static LIBZLINK_HANDLE g_handle;
 /* Lower default fps for softer CPU load and better touch responsiveness. */
-static int g_session_fps = 15;
+static int g_session_fps = 20;
 static int g_session_width = 960;
 static int g_session_height = 480;
 static int g_session_fallback_w[3] = {960, 1440, 0};
@@ -244,7 +244,7 @@ static void session_init(void)
 	session_data.width_margin = 0;
 	session_data.height_margin = 0;
 	session_data.fps = g_session_fps;
-	session_data.density = 230;
+	session_data.density = 150;
 	session_data.is_right_hand = 0;
 	session_data.is_night_mode = 0;
 	session_data.apple_wired = APPLE_WIRED_LINK_NONE;

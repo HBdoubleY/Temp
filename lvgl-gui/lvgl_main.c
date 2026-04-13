@@ -738,6 +738,7 @@ static void lvgl_handle_zlink_ui_requests(void)
         zlink_client_set_video_active(1);
         zlink_client_request_video_focus(0);
         REQUEST_VIDEO_CTRL_DEBOUNCED(LINK_TYPE_ANDROIDAUTO, 1);
+        // zlink_client_set_video_dump(1);
         ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
                               &guider_ui.screen_del, setup_scr_screen_androidAuto,
                               LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
@@ -766,6 +767,7 @@ static void lvgl_handle_zlink_ui_requests(void)
                                       &guider_ui.screen_androidAuto_del, setup_scr_screen,
                                       LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
                 link_ui_on_projection_exited();
+                // zlink_client_set_video_dump(0);
             }
         }
     }
