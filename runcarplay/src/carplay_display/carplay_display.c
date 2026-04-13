@@ -1309,6 +1309,8 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	vdec_attr.mPicWidth  = (unsigned int)session_width;
 	vdec_attr.mPicHeight = (unsigned int)session_height;
 	vdec_attr.mVdecVideoAttr.mMode = VIDEO_MODE_STREAM;
+	vdec_attr.bEnableExtraFrameNum = TRUE;
+	vdec_attr.mExtraFrameNum = 4;
 	ERRORTYPE vret = AW_MPI_VDEC_CreateChn(g_ctx.vdec_chn, &vdec_attr);
 	if (vret != SUCCESS && vret != ERR_VDEC_EXIST)
 		goto err_cleanup;
