@@ -1314,6 +1314,8 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 	ERRORTYPE vret = AW_MPI_VDEC_CreateChn(g_ctx.vdec_chn, &vdec_attr);
 	if (vret != SUCCESS && vret != ERR_VDEC_EXIST)
 		goto err_cleanup;
+
+	AW_MPI_VDEC_SetVEFreq(g_ctx.vdec_chn, 500);
 	AW_MPI_VDEC_StartRecvStream(g_ctx.vdec_chn);
 #endif
 
@@ -1353,6 +1355,9 @@ int carplay_display_create(int disp_x, int disp_y, int disp_width, int disp_heig
 		if (!vo_chn_created)
 			goto err_cleanup;
 	}
+
+	AW_MPI_VO_SetChnFrameRate(g_ctx.vo_layer, g_ctx.vo_chn, 20);
+
 	{
 		MPPCallbackInfo vo_cb;
 		vo_cb.cookie = NULL;
