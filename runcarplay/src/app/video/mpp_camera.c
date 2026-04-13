@@ -130,7 +130,11 @@ static void cp_perf_init_once(void)
     if (g_cp_perf_enable >= 0) {
         return;
     }
-    g_cp_perf_enable = (getenv("CP_PERF_ENABLE") != NULL) ? 1 : 0;
+    {
+        const char *en = getenv("CP_PERF_ENABLE");
+        /* Unset or empty -> off; "0" -> off; any non-zero integer -> on */
+        g_cp_perf_enable = (en && en[0] != '\0' && atoi(en) != 0) ? 1 : 0;
+    }
     const char *warn_us = getenv("CP_PERF_WARN_US");
     if (warn_us && warn_us[0] != '\0') {
         int v = atoi(warn_us);

@@ -103,8 +103,10 @@ static void zlink_perf_init_once(void)
 	g_perf_warn_us = zlink_env_int("CP_PERF_WARN_US", 20000);
 	if (g_perf_warn_us <= 0)
 		g_perf_warn_us = 20000;
-	printf("[cp_perf] cfg enable=%d deep=%d sample_n=%d warn_us=%d\n",
-	       g_perf_enable, g_perf_deep, g_perf_sample_n, g_perf_warn_us);
+	/* Do not emit [cp_perf] when disabled (e.g. CP_PERF_ENABLE=0 still sets the var). */
+	if (g_perf_enable)
+		printf("[cp_perf] cfg enable=%d deep=%d sample_n=%d warn_us=%d\n",
+		       g_perf_enable, g_perf_deep, g_perf_sample_n, g_perf_warn_us);
 }
 
 #define CP_PERF_LOG(stage, fmt, ...) \

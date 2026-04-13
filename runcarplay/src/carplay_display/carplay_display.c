@@ -300,9 +300,6 @@ static unsigned long long g_fq_drop = 0;
 static unsigned long long g_disp_fq_skip = 0;
 static long long g_last_vo_release_us = 0;
 static long long g_last_touch_send_us = 0;
-static int g_touch_calib_x = 0;
-static int g_touch_calib_y = 0;
-static int g_touch_calib_inited = 0;
 
 static struct {
 	long long last_print_us;
@@ -335,24 +332,11 @@ static long long cp_tid(void)
 	return (long long)syscall(SYS_gettid);
 }
 
-static int cpd_env_int(const char *key, int def);
-
 static int cpd_touch_recently_active(void)
 {
 	long long now = cp_now_us();
 	long long dt = now - g_last_touch_send_us;
 	return (dt >= 0 && dt <= 180000) ? 1 : 0;
-}
-
-static void cpd_touch_calib_init_once(void)
-{
-	if (g_touch_calib_inited)
-		return;
-	g_touch_calib_x = cpd_env_int("LINK_TOUCH_CALIB_X", 0);
-	g_touch_calib_y = cpd_env_int("LINK_TOUCH_CALIB_Y", 0);
-	g_touch_calib_inited = 1;
-	printf("[carplay_touch] calib_x=%d calib_y=%d (positive means shift left/up)\n",
-	       g_touch_calib_x, g_touch_calib_y);
 }
 
 static void cpd_perf_maybe_print(void)
@@ -1167,7 +1151,6 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 {
 	int session_width, session_height;
 	long long t0 = cp_now_us();
-	cpd_touch_calib_init_once();
 
 	pthread_mutex_lock(&g_ctx.rect_mutex);
 	session_width  = g_ctx.session_width;
@@ -1176,20 +1159,12 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 
 	if (session_width <= 0 || session_height <= 0)
 		return;
-	/* Apply optional calibration before mapping to session coordinates. */
-	int adj_x = screen_x - g_touch_calib_x;
-	int adj_y = screen_y - g_touch_calib_y;
-	if (adj_x < 0) adj_x = 0;
-	if (adj_y < 0) adj_y = 0;
-	if (adj_x >= LVGL_LOGICAL_W) adj_x = LVGL_LOGICAL_W - 1;
-	if (adj_y >= LVGL_LOGICAL_H) adj_y = LVGL_LOGICAL_H - 1;
-
-	if (adj_x < 0 || adj_x >= LVGL_LOGICAL_W ||
-	    adj_y < 0 || adj_y >= LVGL_LOGICAL_H)
+	if (screen_x < 0 || screen_x >= LVGL_LOGICAL_W ||
+	    screen_y < 0 || screen_y >= LVGL_LOGICAL_H)
 		return;
 
-	int session_x = (int)((long)adj_x * session_width  / LVGL_LOGICAL_W);
-	int session_y = (int)((long)adj_y * session_height / LVGL_LOGICAL_H);
+	int session_x = (int)((long)screen_x * session_width  / LVGL_LOGICAL_W);
+	int session_y = (int)((long)screen_y * session_height / LVGL_LOGICAL_H);
 	if (session_x < 0) session_x = 0;
 	if (session_x >= session_width)  session_x = session_width - 1;
 	if (session_y < 0) session_y = 0;
@@ -1198,8 +1173,8 @@ static void touch_apply_and_send(int screen_x, int screen_y, int is_touch_down)
 	libzlink_touch_event(session_x, session_y, is_touch_down);
 	g_last_touch_send_us = cp_now_us();
 	if ((g_frame_seq % (unsigned long long)zlink_client_perf_sample_n()) == 0ULL) {
-		CPD_LOG("touch_map_send", "sx=%d sy=%d adjx=%d adjy=%d tx=%d ty=%d down=%d cost_us=%lld",
-		        screen_x, screen_y, adj_x, adj_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
+		CPD_LOG("touch_map_send", "sx=%d sy=%d tx=%d ty=%d down=%d cost_us=%lld",
+		        screen_x, screen_y, session_x, session_y, is_touch_down, cp_now_us() - t0);
 	}
 }
 
