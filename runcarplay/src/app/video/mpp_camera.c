@@ -60,7 +60,7 @@ static void mpp_camera_set_storage_fault(const char *reason);
 
 #define AI2MUX 
 #define TACKPIC
-#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (64*1024)
+#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (256*1024)
 #define ISP_RUN (1)
 
 extern int g_g2dfd;
@@ -85,7 +85,7 @@ static int g_dbg_disable_fsync = 0;
 static int g_dbg_disable_preview_g2d = 0;
 static int g_dbg_fsync_interval_ms = 3000;
 static int g_rec_audio_enable = 0;
-static int g_rec_bitrate = 8 * 1024 * 1024;
+static int g_rec_bitrate = 2 * 1024 * 1024;
 static int g_enable_fsync = 0;
 static int g_dbg_switches_inited = 0;
 static volatile int g_mpp_storage_fault = 0;
@@ -1033,7 +1033,7 @@ static ERRORTYPE InitMppCameraData(mpp_camera_para_conf *pContext){
 static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
     pContext->m_vi.mWidth = 1920;
     pContext->m_vi.mHeight = 1080;
-    pContext->m_vi.mFrameRate = 20;
+    pContext->m_vi.mFrameRate = 25;
     pContext->m_vi.mPixFmt = MM_PIXEL_FORMAT_YVU_SEMIPLANAR_420;
     pContext->m_vi.mColorSpace = V4L2_COLORSPACE_JPEG;
     pContext->m_vi.mViBufferNum = 5;
@@ -1045,7 +1045,7 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
 
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
-    pContext->m_venc.mFrameRate = 20;
+    pContext->m_venc.mFrameRate = 25;
     pContext->m_venc.mBitRate = g_rec_bitrate;
     pContext->m_venc.mRcMode = 0;
     pContext->m_venc.mEncoderFmt = PT_H264;
@@ -1762,6 +1762,18 @@ static ERRORTYPE configVencChnAttr(mpp_camera_para_conf *pContext, VENC_CHN_ATTR
     {
         case PT_H264:
         {
+#if 1
+            pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
+            pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
+            pVencChnAttr->VeAttr.AttrH264e.Profile = 0;//0:base 1:main 2:high
+            pVencChnAttr->VeAttr.AttrH264e.bByFrame = TRUE;
+            pVencChnAttr->VeAttr.AttrH264e.PicWidth  = pContext->m_venc.mWidth;
+            pVencChnAttr->VeAttr.AttrH264e.PicHeight = pContext->m_venc.mHeight;
+            pVencChnAttr->VeAttr.AttrH264e.mLevel = H264_LEVEL_51;
+            pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = TRUE;
+            pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
+            pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = FALSE;
+#else
             pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
             pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
             pVencChnAttr->VeAttr.AttrH264e.Profile = 2;//0:base 1:main 2:high
@@ -1772,6 +1784,7 @@ static ERRORTYPE configVencChnAttr(mpp_camera_para_conf *pContext, VENC_CHN_ATTR
             pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = FALSE;
             pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
             pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = TRUE;
+#endif
             break;
         }
         case PT_H265:
