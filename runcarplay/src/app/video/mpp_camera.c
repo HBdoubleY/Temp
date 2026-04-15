@@ -859,7 +859,7 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
     pContext->m_venc.mFrameRate = 25;
-    pContext->m_venc.mBitRate = 1048576 * 8;
+    pContext->m_venc.mBitRate = 1024 * 1024 * 8;
     pContext->m_venc.mRcMode = 0;
     pContext->m_venc.mEncoderFmt = PT_H264;
 
@@ -1574,6 +1574,18 @@ static ERRORTYPE configVencChnAttr(mpp_camera_para_conf *pContext, VENC_CHN_ATTR
     {
         case PT_H264:
         {
+#if 1
+            pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
+            pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
+            pVencChnAttr->VeAttr.AttrH264e.Profile = 0;//0:base 1:main 2:high
+            pVencChnAttr->VeAttr.AttrH264e.bByFrame = TRUE;
+            pVencChnAttr->VeAttr.AttrH264e.PicWidth  = pContext->m_venc.mWidth;
+            pVencChnAttr->VeAttr.AttrH264e.PicHeight = pContext->m_venc.mHeight;
+            pVencChnAttr->VeAttr.AttrH264e.mLevel = H264_LEVEL_51;
+            pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = TRUE;
+            pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
+            pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = FALSE;
+#else
             pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
             pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
             pVencChnAttr->VeAttr.AttrH264e.Profile = 2;//0:base 1:main 2:high
@@ -1586,6 +1598,7 @@ static ERRORTYPE configVencChnAttr(mpp_camera_para_conf *pContext, VENC_CHN_ATTR
             // pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = TRUE;
             pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
             pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = TRUE;
+#endif
             break;
         }
         case PT_H265:

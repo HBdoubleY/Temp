@@ -41,6 +41,7 @@ CFLAGS += "-I$(LVGL_DIR)/ui/generated/bootLogo/"
 
 CFLAGS += "-I$(LVGL_DIR)/ui/generated/MediaLibrary/"
 CFLAGS += "-I$(LVGL_DIR)/ui/generated/OTA/"
+CFLAGS += "-I$(LVGL_DIR)/ui/generated/tireAlarm/"
 
 CFLAGS += "-I$(LVGL_DIR)/../external/aw_pack_src/lib_aw/include/eyesee-mpp/middleware/media/LIBRARY/libcedarc/include"
 
@@ -144,6 +145,8 @@ UI_CSRCS += $(wildcard ui/generated/MediaLibrary/font/*c)
 UI_CSRCS += $(wildcard ui/generated/OTA/*c)
 UI_CSRCS += $(wildcard ui/generated/OTA/res/*c)
 UI_CSRCS += $(wildcard ui/generated/OTA/font/*c)
+UI_CSRCS += $(wildcard ui/generated/tireAlarm/*c)
+
 
 CSRCS += $(UI_CSRCS)
 UI_OBJS := $(UI_CSRCS:.C=.O)

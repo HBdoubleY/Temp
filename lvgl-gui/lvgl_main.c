@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +31,8 @@
 #include "bt_serial.h"
 #include "tire_manager.h"
 
+LV_IMG_DECLARE(ic_tp_icon_60)
+
 static pthread_t threadID;
 lv_ui guider_ui;
 static int screanWidth = 1440;
@@ -45,7 +48,387 @@ extern lv_timer_t *autoModeTimer;
 extern void creatAutoModeTimerCbk(lv_timer_t *timer);
 extern void recorder_status_timer(lv_timer_t *timer);
 
-void tire_ui_refresh_now(void);
+#define TIRE_ALARM_DIR "/opt/private"
+#define TIRE_ALARM_FILE "/opt/private/tire_alarm_para.txt"
+#define TIRE_DEFAULT_PRESS_MIN_BAR 1.6f
+#define TIRE_DEFAULT_PRESS_MAX_BAR 4.0f
+#define TIRE_DEFAULT_TEMP_MAX_C 68
+#define TIRE_MAX_PRESS_BAR 14.0f
+#define TIRE_MIN_TEMP_C (-40)
+#define TIRE_MAX_TEMP_C 154
+
+static bool s_tire_alarm_inited = false;
+static float s_tire_alarm_press_min_bar = TIRE_DEFAULT_PRESS_MIN_BAR;
+static float s_tire_alarm_press_max_bar = TIRE_DEFAULT_PRESS_MAX_BAR;
+static int s_tire_alarm_temp_max_c = TIRE_DEFAULT_TEMP_MAX_C;
+
+static bool s_front_low_alarm = false;
+static bool s_front_high_alarm = false;
+static bool s_front_temp_alarm = false;
+static bool s_rear_low_alarm = false;
+static bool s_rear_high_alarm = false;
+static bool s_rear_temp_alarm = false;
+
+static lv_obj_t *s_tire_alarm_mask = NULL;
+static lv_obj_t *s_tire_alarm_text = NULL;
+static lv_timer_t *s_tire_alarm_close_timer = NULL;
+static lv_obj_t *s_tire_alarm_btn = NULL;
+
+typedef struct {
+    bool front_pressure_alarm;
+    bool front_temp_alarm;
+    bool rear_pressure_alarm;
+    bool rear_temp_alarm;
+} tire_alarm_view_state_t;
+
+static float tire_alarm_bar_to_display(float bar_value)
+{
+    return g_sys_Data.pressureUnit ? (bar_value * 14.5f) : bar_value;
+}
+
+static int tire_alarm_temp_to_display(int temp_c)
+{
+    return g_sys_Data.tempUnit ? ((temp_c * 9) / 5 + 32) : temp_c;
+}
+
+static float tire_alarm_clamp_press_bar(float value)
+{
+    if (value < 0.0f) return 0.0f;
+    if (value > TIRE_MAX_PRESS_BAR) return TIRE_MAX_PRESS_BAR;
+    return value;
+}
+
+static int tire_alarm_clamp_temp_c(int value)
+{
+    if (value < TIRE_MIN_TEMP_C) return TIRE_MIN_TEMP_C;
+    if (value > TIRE_MAX_TEMP_C) return TIRE_MAX_TEMP_C;
+    return value;
+}
+
+static void tire_alarm_sync_sys_thresholds(void)
+{
+    g_sys_Data.pressureMin = tire_alarm_bar_to_display(s_tire_alarm_press_min_bar);
+    g_sys_Data.pressureMax = tire_alarm_bar_to_display(s_tire_alarm_press_max_bar);
+    g_sys_Data.tempMax = tire_alarm_temp_to_display(s_tire_alarm_temp_max_c);
+}
+
+static lv_color_t tire_alarm_get_normal_text_color(void)
+{
+    THEME_MODE mode = g_sys_Data.themeMode;
+    if (mode == THEME_DARK || (mode == THEME_AUTO && g_sys_Data.gpadcVol >= 1300)) {
+        return lv_color_hex(0xffffff);
+    }
+    return lv_color_hex(0x000000);
+}
+
+static lv_color_t tire_alarm_get_alert_text_color(void)
+{
+    return lv_color_hex(0xff3b30);
+}
+
+static void tire_alarm_apply_label_color(lv_obj_t *obj, lv_color_t color)
+{
+    if (!lv_obj_is_valid(obj)) return;
+    lv_obj_set_style_text_color(obj, color, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_invalidate(obj);
+}
+
+static void tire_alarm_refresh_value_colors(const tire_alarm_view_state_t *state)
+{
+    const lv_color_t normal = tire_alarm_get_normal_text_color();
+    const lv_color_t alert = tire_alarm_get_alert_text_color();
+
+    tire_alarm_apply_label_color(guider_ui.screen_Tire_label_fPressure,
+                                 state->front_pressure_alarm ? alert : normal);
+    tire_alarm_apply_label_color(guider_ui.screen_Tire_label_fTemp,
+                                 state->front_temp_alarm ? alert : normal);
+    tire_alarm_apply_label_color(guider_ui.screen_Tire_label_bPressure,
+                                 state->rear_pressure_alarm ? alert : normal);
+    tire_alarm_apply_label_color(guider_ui.screen_Tire_label_bTemp,
+                                 state->rear_temp_alarm ? alert : normal);
+    tire_alarm_apply_label_color(guider_ui.screen_btn_cartrip_label_fTyre_data,
+                                 (state->front_pressure_alarm || state->front_temp_alarm) ? alert : normal);
+    tire_alarm_apply_label_color(guider_ui.screen_btn_cartrip_label_bTyre_data,
+                                 (state->rear_pressure_alarm || state->rear_temp_alarm) ? alert : normal);
+}
+
+static void tire_alarm_close_popup(void)
+{
+    if (s_tire_alarm_close_timer) {
+        lv_timer_del(s_tire_alarm_close_timer);
+        s_tire_alarm_close_timer = NULL;
+    }
+    if (s_tire_alarm_mask) {
+        lv_obj_del(s_tire_alarm_mask);
+        s_tire_alarm_mask = NULL;
+    }
+    s_tire_alarm_text = NULL;
+    s_tire_alarm_btn = NULL;
+}
+
+static void tire_alarm_close_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    tire_alarm_close_popup();
+}
+
+static void tire_alarm_popup_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    tire_alarm_close_popup();
+}
+
+static void tire_alarm_show_popup(const char *message)
+{
+    if (!message || !message[0]) return;
+
+    if (!s_tire_alarm_mask || !lv_obj_is_valid(s_tire_alarm_mask)) {
+        s_tire_alarm_mask = lv_obj_create(lv_layer_top());
+        lv_obj_set_size(s_tire_alarm_mask, LV_PCT(100), LV_PCT(100));
+        lv_obj_clear_flag(s_tire_alarm_mask, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_border_width(s_tire_alarm_mask, 0, 0);
+        lv_obj_set_style_pad_all(s_tire_alarm_mask, 0, 0);
+        lv_obj_set_style_radius(s_tire_alarm_mask, 0, 0);
+        lv_obj_set_style_bg_color(s_tire_alarm_mask, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(s_tire_alarm_mask, LV_OPA_40, 0);
+        lv_obj_add_flag(s_tire_alarm_mask, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_foreground(s_tire_alarm_mask);
+
+        lv_obj_t *popup = lv_obj_create(s_tire_alarm_mask);
+        lv_obj_set_size(popup, 760, 360);
+        lv_obj_center(popup);
+        lv_obj_clear_flag(popup, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(popup, 28, 0);
+        lv_obj_set_style_border_width(popup, 0, 0);
+        lv_obj_set_style_pad_left(popup, 40, 0);
+        lv_obj_set_style_pad_right(popup, 40, 0);
+        lv_obj_set_style_pad_top(popup, 28, 0);
+        lv_obj_set_style_pad_bottom(popup, 28, 0);
+        lv_obj_set_style_bg_color(popup, lv_color_hex(0x24334d), 0);
+        lv_obj_set_style_bg_grad_color(popup, lv_color_hex(0x3c537f), 0);
+        lv_obj_set_style_bg_grad_dir(popup, LV_GRAD_DIR_VER, 0);
+
+        lv_obj_t *icon = lv_img_create(popup);
+        lv_img_set_src(icon, &ic_tp_icon_60);
+        lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, -8);
+
+        s_tire_alarm_text = lv_label_create(popup);
+        lv_obj_set_width(s_tire_alarm_text, 640);
+        lv_obj_set_style_text_align(s_tire_alarm_text, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(s_tire_alarm_text, &lv_font_harmonyOS_42, 0);
+        lv_obj_set_style_text_color(s_tire_alarm_text, tire_alarm_get_alert_text_color(), 0);
+        lv_label_set_long_mode(s_tire_alarm_text, LV_LABEL_LONG_WRAP);
+        lv_obj_align(s_tire_alarm_text, LV_ALIGN_TOP_MID, 0, 52);
+
+        s_tire_alarm_btn = lv_btn_create(popup);
+        lv_obj_set_size(s_tire_alarm_btn, 360, 74);
+        lv_obj_align(s_tire_alarm_btn, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_radius(s_tire_alarm_btn, 16, 0);
+        lv_obj_set_style_border_width(s_tire_alarm_btn, 0, 0);
+        lv_obj_set_style_bg_color(s_tire_alarm_btn, lv_color_hex(0x2d2d2d), 0);
+        lv_obj_add_event_cb(s_tire_alarm_btn, tire_alarm_popup_event_cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *btn_label = lv_label_create(s_tire_alarm_btn);
+        lv_label_set_text(btn_label, "确定");
+        lv_obj_set_style_text_font(btn_label, &lv_font_harmonyOS_42, 0);
+        lv_obj_set_style_text_color(btn_label, lv_color_hex(0xffffff), 0);
+        lv_obj_center(btn_label);
+    }
+
+    if (s_tire_alarm_text && lv_obj_is_valid(s_tire_alarm_text)) {
+        lv_label_set_text(s_tire_alarm_text, message);
+        lv_obj_invalidate(s_tire_alarm_text);
+    }
+
+    if (s_tire_alarm_close_timer) {
+        lv_timer_del(s_tire_alarm_close_timer);
+    }
+    s_tire_alarm_close_timer = lv_timer_create(tire_alarm_close_timer_cb, 15000, NULL);
+    lv_timer_set_repeat_count(s_tire_alarm_close_timer, 1);
+}
+
+static void tire_alarm_config_reset_default_values(void)
+{
+    s_tire_alarm_press_min_bar = TIRE_DEFAULT_PRESS_MIN_BAR;
+    s_tire_alarm_press_max_bar = TIRE_DEFAULT_PRESS_MAX_BAR;
+    s_tire_alarm_temp_max_c = TIRE_DEFAULT_TEMP_MAX_C;
+}
+
+static void tire_alarm_config_save(void)
+{
+    struct stat st;
+    if (stat(TIRE_ALARM_DIR, &st) != 0) {
+        mkdir(TIRE_ALARM_DIR, 0755);
+    }
+
+    FILE *fp = fopen(TIRE_ALARM_FILE, "w");
+    if (!fp) return;
+
+    fprintf(fp,
+            "{\n"
+            "    \"pressMin\": %.1f,\n"
+            "    \"pressMax\": %.1f,\n"
+            "    \"tempMax\": %d\n"
+            "}\n",
+            s_tire_alarm_press_min_bar,
+            s_tire_alarm_press_max_bar,
+            s_tire_alarm_temp_max_c);
+    fclose(fp);
+}
+
+static bool tire_alarm_config_load(void)
+{
+    FILE *fp = fopen(TIRE_ALARM_FILE, "r");
+    if (!fp) return false;
+
+    char buf[256] = {0};
+    size_t len = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    if (len == 0) return false;
+
+    float press_min = 0.0f;
+    float press_max = 0.0f;
+    int temp_max = 0;
+    int matched = sscanf(buf,
+                         " { \"%*[^\"]\" : %f , \"%*[^\"]\" : %f , \"%*[^\"]\" : %d } ",
+                         &press_min, &press_max, &temp_max);
+    if (matched != 3) {
+        const char *p_press_min = strstr(buf, "\"pressMin\"");
+        const char *p_press_max = strstr(buf, "\"pressMax\"");
+        const char *p_temp_max = strstr(buf, "\"tempMax\"");
+        if (!p_press_min || !p_press_max || !p_temp_max) {
+            return false;
+        }
+        if (sscanf(p_press_min, "\"pressMin\"%*[^0-9.-]%f", &press_min) != 1) return false;
+        if (sscanf(p_press_max, "\"pressMax\"%*[^0-9.-]%f", &press_max) != 1) return false;
+        if (sscanf(p_temp_max, "\"tempMax\"%*[^0-9-]%d", &temp_max) != 1) return false;
+    }
+
+    press_min = tire_alarm_clamp_press_bar(press_min);
+    press_max = tire_alarm_clamp_press_bar(press_max);
+    temp_max = tire_alarm_clamp_temp_c(temp_max);
+
+    if (press_min >= press_max) {
+        tire_alarm_config_reset_default_values();
+        return false;
+    }
+
+    s_tire_alarm_press_min_bar = press_min;
+    s_tire_alarm_press_max_bar = press_max;
+    s_tire_alarm_temp_max_c = temp_max;
+    return true;
+}
+
+void tire_alarm_init_if_needed(void)
+{
+    if (s_tire_alarm_inited) return;
+    tire_alarm_config_reset_default_values();
+    tire_alarm_config_load();
+    tire_alarm_sync_sys_thresholds();
+    s_tire_alarm_inited = true;
+}
+
+void tire_alarm_refresh_threshold_ui(void)
+{
+    tire_alarm_init_if_needed();
+    tire_alarm_sync_sys_thresholds();
+
+    if (lv_obj_is_valid(guider_ui.screen_Tire_label_pressMin1)) {
+        char str[20];
+        if (g_sys_Data.pressureUnit) {
+            snprintf(str, sizeof(str), "%.0f", g_sys_Data.pressureMin);
+        } else {
+            snprintf(str, sizeof(str), "%.1f", g_sys_Data.pressureMin);
+        }
+        lv_label_set_text(guider_ui.screen_Tire_label_pressMin1, str);
+        lv_obj_invalidate(guider_ui.screen_Tire_label_pressMin1);
+    }
+
+    if (lv_obj_is_valid(guider_ui.screen_Tire_label_pressMax1)) {
+        char str[20];
+        if (g_sys_Data.pressureUnit) {
+            snprintf(str, sizeof(str), "%.0f", g_sys_Data.pressureMax);
+        } else {
+            snprintf(str, sizeof(str), "%.1f", g_sys_Data.pressureMax);
+        }
+        lv_label_set_text(guider_ui.screen_Tire_label_pressMax1, str);
+        lv_obj_invalidate(guider_ui.screen_Tire_label_pressMax1);
+    }
+
+    if (lv_obj_is_valid(guider_ui.screen_Tire_label_tempMax1)) {
+        char str[20];
+        snprintf(str, sizeof(str), "%d", g_sys_Data.tempMax);
+        lv_label_set_text(guider_ui.screen_Tire_label_tempMax1, str);
+        lv_obj_invalidate(guider_ui.screen_Tire_label_tempMax1);
+    }
+}
+
+void tire_alarm_adjust_pressure_min(int direction)
+{
+    tire_alarm_init_if_needed();
+    s_tire_alarm_press_min_bar += (direction > 0 ? 0.1f : -0.1f);
+    s_tire_alarm_press_min_bar = tire_alarm_clamp_press_bar(s_tire_alarm_press_min_bar);
+    if (s_tire_alarm_press_min_bar >= s_tire_alarm_press_max_bar) {
+        s_tire_alarm_press_min_bar = tire_alarm_clamp_press_bar(s_tire_alarm_press_max_bar - 0.1f);
+    }
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+    tire_alarm_config_save();
+    tire_ui_refresh_now();
+}
+
+void tire_alarm_adjust_pressure_max(int direction)
+{
+    tire_alarm_init_if_needed();
+    s_tire_alarm_press_max_bar += (direction > 0 ? 0.1f : -0.1f);
+    s_tire_alarm_press_max_bar = tire_alarm_clamp_press_bar(s_tire_alarm_press_max_bar);
+    if (s_tire_alarm_press_max_bar <= s_tire_alarm_press_min_bar) {
+        s_tire_alarm_press_max_bar = tire_alarm_clamp_press_bar(s_tire_alarm_press_min_bar + 0.1f);
+    }
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+    tire_alarm_config_save();
+    tire_ui_refresh_now();
+}
+
+void tire_alarm_adjust_temp_max(int direction)
+{
+    tire_alarm_init_if_needed();
+    s_tire_alarm_temp_max_c += (direction > 0 ? 1 : -1);
+    s_tire_alarm_temp_max_c = tire_alarm_clamp_temp_c(s_tire_alarm_temp_max_c);
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+    tire_alarm_config_save();
+    tire_ui_refresh_now();
+}
+
+void tire_alarm_reset_defaults(void)
+{
+    tire_alarm_init_if_needed();
+    tire_alarm_config_reset_default_values();
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+    tire_alarm_config_save();
+    tire_ui_refresh_now();
+}
+
+void tire_alarm_set_pressure_unit(bool use_psi)
+{
+    tire_alarm_init_if_needed();
+    if (g_sys_Data.pressureUnit == use_psi) return;
+    g_sys_Data.pressureUnit = use_psi;
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+}
+
+void tire_alarm_set_temp_unit(bool use_fahrenheit)
+{
+    tire_alarm_init_if_needed();
+    if (g_sys_Data.tempUnit == use_fahrenheit) return;
+    g_sys_Data.tempUnit = use_fahrenheit;
+    tire_alarm_sync_sys_thresholds();
+    tire_alarm_refresh_threshold_ui();
+}
 
 void PrintTime() {
     time_t t;
@@ -281,13 +664,16 @@ static void bt_status_check_timer(lv_timer_t *timer) {
 }
 
 void tire_ui_refresh_now(void) {
+    tire_alarm_view_state_t view_state = {0};
+    char alarm_message[256] = {0};
+    size_t alarm_len = 0;
     int f_kpa = 0, f_c = 0;
     int b_kpa = 0, b_c = 0;
     bool f_ok = tire_front_get_kpa_temp(&f_kpa, &f_c);
     bool b_ok = tire_rear_get_kpa_temp(&b_kpa, &b_c);
 
-    // 1 bar = 14.5037738 psi
-    const float PSI_PER_BAR = 14.5037738f;
+    tire_alarm_init_if_needed();
+    tire_alarm_sync_sys_thresholds();
 
     const bool pressure_unit = g_sys_Data.pressureUnit;
     const bool temp_unit = g_sys_Data.tempUnit;
@@ -315,18 +701,35 @@ void tire_ui_refresh_now(void) {
         lv_obj_invalidate(guider_ui.screen_Tire_btn_fPair_label);
     }
 
+    tire_alarm_refresh_threshold_ui();
+
     if (f_ok) {
-        if (!pressure_unit) {
-            g_sys_Data.fPressure = (float)f_kpa / 100.0f;
-        } else {
-            g_sys_Data.fPressure = ((float)f_kpa / 100.0f) * PSI_PER_BAR;
+        const float f_bar = (float)f_kpa / 100.0f;
+        g_sys_Data.fPressure = pressure_unit ? tire_alarm_bar_to_display(f_bar) : f_bar;
+        g_sys_Data.fTemp = temp_unit ? tire_alarm_temp_to_display(f_c) : f_c;
+
+        view_state.front_pressure_alarm = (f_bar < s_tire_alarm_press_min_bar) || (f_bar > s_tire_alarm_press_max_bar);
+        view_state.front_temp_alarm = (f_c > s_tire_alarm_temp_max_c);
+
+        if (!s_front_low_alarm && f_bar < s_tire_alarm_press_min_bar) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s前轮胎压已低于警示值,请检查",
+                                  alarm_len ? "\n" : "");
+        }
+        if (!s_front_high_alarm && f_bar > s_tire_alarm_press_max_bar) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s前轮胎压已高于警示值,请检查",
+                                  alarm_len ? "\n" : "");
+        }
+        if (!s_front_temp_alarm && f_c > s_tire_alarm_temp_max_c) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s前轮温度已高于警示值,请检查",
+                                  alarm_len ? "\n" : "");
         }
 
-        if (!temp_unit) {
-            g_sys_Data.fTemp = f_c;
-        } else {
-            g_sys_Data.fTemp = (int)(((float)f_c * 9.0f / 5.0f) + 32.0f);
-        }
+        s_front_low_alarm = (f_bar < s_tire_alarm_press_min_bar);
+        s_front_high_alarm = (f_bar > s_tire_alarm_press_max_bar);
+        s_front_temp_alarm = (f_c > s_tire_alarm_temp_max_c);
 
         char buf[32] = {0};
         if (!pressure_unit) {
@@ -349,6 +752,9 @@ void tire_ui_refresh_now(void) {
             lv_obj_invalidate(guider_ui.screen_Tire_label_fTemp);
         }
     } else {
+        s_front_low_alarm = false;
+        s_front_high_alarm = false;
+        s_front_temp_alarm = false;
         if (lv_obj_is_valid(guider_ui.screen_Tire_label_fPressure)) {
             lv_label_set_text(guider_ui.screen_Tire_label_fPressure, !pressure_unit ? "--Bar" : "--Psi");
             lv_obj_invalidate(guider_ui.screen_Tire_label_fPressure);
@@ -360,17 +766,32 @@ void tire_ui_refresh_now(void) {
     }
 
     if (b_ok) {
-        if (!pressure_unit) {
-            g_sys_Data.bPressure = (float)b_kpa / 100.0f;
-        } else {
-            g_sys_Data.bPressure = ((float)b_kpa / 100.0f) * PSI_PER_BAR;
+        const float b_bar = (float)b_kpa / 100.0f;
+        g_sys_Data.bPressure = pressure_unit ? tire_alarm_bar_to_display(b_bar) : b_bar;
+        g_sys_Data.bTemp = temp_unit ? tire_alarm_temp_to_display(b_c) : b_c;
+
+        view_state.rear_pressure_alarm = (b_bar < s_tire_alarm_press_min_bar) || (b_bar > s_tire_alarm_press_max_bar);
+        view_state.rear_temp_alarm = (b_c > s_tire_alarm_temp_max_c);
+
+        if (!s_rear_low_alarm && b_bar < s_tire_alarm_press_min_bar) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s后轮胎压已低于警示值,请检查",
+                                  alarm_len ? "\n" : "");
+        }
+        if (!s_rear_high_alarm && b_bar > s_tire_alarm_press_max_bar) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s后轮胎压已高于警示值,请检查",
+                                  alarm_len ? "\n" : "");
+        }
+        if (!s_rear_temp_alarm && b_c > s_tire_alarm_temp_max_c) {
+            alarm_len += snprintf(alarm_message + alarm_len, sizeof(alarm_message) - alarm_len,
+                                  "%s后轮温度已高于警示值,请检查",
+                                  alarm_len ? "\n" : "");
         }
 
-        if (!temp_unit) {
-            g_sys_Data.bTemp = b_c;
-        } else {
-            g_sys_Data.bTemp = (int)(((float)b_c * 9.0f / 5.0f) + 32.0f);
-        }
+        s_rear_low_alarm = (b_bar < s_tire_alarm_press_min_bar);
+        s_rear_high_alarm = (b_bar > s_tire_alarm_press_max_bar);
+        s_rear_temp_alarm = (b_c > s_tire_alarm_temp_max_c);
 
         char buf[32] = {0};
         if (!pressure_unit) {
@@ -393,6 +814,9 @@ void tire_ui_refresh_now(void) {
             lv_obj_invalidate(guider_ui.screen_Tire_label_bTemp);
         }
     } else {
+        s_rear_low_alarm = false;
+        s_rear_high_alarm = false;
+        s_rear_temp_alarm = false;
         if (lv_obj_is_valid(guider_ui.screen_Tire_label_bPressure)) {
             lv_label_set_text(guider_ui.screen_Tire_label_bPressure, !pressure_unit ? "--Bar" : "--Psi");
             lv_obj_invalidate(guider_ui.screen_Tire_label_bPressure);
@@ -423,6 +847,11 @@ void tire_ui_refresh_now(void) {
         }
         lv_label_set_text(guider_ui.screen_btn_cartrip_label_bTyre_data, buf);
         lv_obj_invalidate(guider_ui.screen_btn_cartrip_label_bTyre_data);
+    }
+
+    tire_alarm_refresh_value_colors(&view_state);
+    if (alarm_len > 0) {
+        tire_alarm_show_popup(alarm_message);
     }
 }
 
@@ -530,33 +959,37 @@ static void lvgl_handle_zlink_ui_requests(void)
 
     if (session_rising && on_target_screen) {
         if (linktype == LINK_TYPE_CARPLAY) {
+            ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
+                &guider_ui.screen_del, setup_scr_screen_carPlay,
+                LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+
             zlink_client_reset_video_prebuffer();
             zlink_client_request_video_focus(1);
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 0, NULL);
             int disp_w = 720;
             int disp_h = 1440;
-            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            int cr = carplay_display_create(0, 0, disp_w, disp_h, 960, 480);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_CARPLAY, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-            ui_load_scr_animation(&guider_ui, &guider_ui.screen_carPlay, guider_ui.screen_carPlay_del,
-                                  &guider_ui.screen_del, setup_scr_screen_carPlay,
-                                  LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+
             if (cr == 0)
                 link_ui_on_projection_entered();
         } else if (linktype == LINK_TYPE_ANDROIDAUTO) {
+            ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
+                &guider_ui.screen_del, setup_scr_screen_androidAuto,
+                LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+
             zlink_client_reset_video_prebuffer();
             zlink_client_request_video_focus(1);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 0, NULL);
             int disp_w = 720;
             int disp_h = 1440;
-            int cr = carplay_display_create(0, 0, disp_w, disp_h, 1440, 720);
+            int cr = carplay_display_create(0, 0, disp_w, disp_h, 960, 480);
             zlink_client_set_video_active(1);
             zlink_client_request_video_focus(0);
             request_link_action(LINK_TYPE_ANDROIDAUTO, LINK_ACTION_VIDEO_CTRL, 1, NULL);
-            ui_load_scr_animation(&guider_ui, &guider_ui.screen_androidAuto, guider_ui.screen_androidAuto_del,
-                                  &guider_ui.screen_del, setup_scr_screen_androidAuto,
-                                  LV_SCR_LOAD_ANIM_NONE, 0, 0, true, true);
+
             if (cr == 0)
                 link_ui_on_projection_entered();
         }
