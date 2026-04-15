@@ -13,6 +13,7 @@
 #include "storageDataApi.h"
 #include "myTimer.h"
 #include "mppFileManager.h"
+#include "lvgl_main.h"
 
 extern lv_timer_t *DVRstaTimer;
 extern lv_timer_t *HideBtnContTimer;
@@ -119,17 +120,7 @@ static void screen_DVR_btn_recorder_event_handler(lv_event_t *e){
 				show_popup_simple_v8(get_string_for_language(g_sys_Data.current_language,"main_txt_TFNotFreeMem"));
 				return;
 			}			
-			deletFileInRecorderPath(REC_PATH);
-
-
-			recording(&g_sys_Data.vipp0_config);
-			recording(&g_sys_Data.vipp8_config);
-
-			dashTimeMark(&g_sys_Data.vipp0_config, g_sys_Data.TimeMark);
-			dashTimeMark(&g_sys_Data.vipp8_config, g_sys_Data.TimeMark);
-
-			SoundRecording(&g_sys_Data.vipp0_config, g_sys_Data.SoundRecorder);
-			SoundRecording(&g_sys_Data.vipp8_config, g_sys_Data.SoundRecorder);
+			recorder_request_start_async();
 #endif
 			if(DVRstaTimer == NULL) DVRstaTimer = lv_timer_create(recorder_status_timer, 1000, NULL); 
 			break;
@@ -139,8 +130,7 @@ static void screen_DVR_btn_recorder_event_handler(lv_event_t *e){
 			printf("stop to recording!!!!!\n");
 			show_label_with_timer(guider_ui.screen_DVR_label_Popup, "dvr_txt_stopRecorder", 1000);
 #if 1
-			stopRecording(&g_sys_Data.vipp0_config);
-			stopRecording(&g_sys_Data.vipp8_config);
+			recorder_request_stop_async();
 #endif
             if(DVRstaTimer != NULL){
                 lv_timer_del(DVRstaTimer);
@@ -180,8 +170,7 @@ static void screen_DVR_btn_playback_event_handler(lv_event_t *e){
 				g_sys_Data.recorderMode = RECORDER_NONE;
 				show_label_with_timer(guider_ui.screen_DVR_label_Popup, "dvr_txt_stopRecorder", 1000);
 				#if 1
-				stopRecording(&g_sys_Data.vipp0_config);
-				stopRecording(&g_sys_Data.vipp8_config);
+				recorder_request_stop_async();
 				#endif
 				if(DVRstaTimer != NULL){
 					lv_timer_del(DVRstaTimer);
@@ -282,16 +271,7 @@ static void screen_DVR_btn_lock_event_handler (lv_event_t *e)
 				show_popup_simple_v8(get_string_for_language(g_sys_Data.current_language,"main_txt_TFNotFreeMem"));
 				return;
 			}	
-			deletFileInRecorderPath(U_REC_PATH);
-
-			recording(&g_sys_Data.vipp0_config);
-			recording(&g_sys_Data.vipp8_config);
-
-			dashTimeMark(&g_sys_Data.vipp0_config, g_sys_Data.TimeMark);
-			dashTimeMark(&g_sys_Data.vipp8_config, g_sys_Data.TimeMark);			
-
-			SoundRecording(&g_sys_Data.vipp0_config, g_sys_Data.SoundRecorder);
-			SoundRecording(&g_sys_Data.vipp8_config, g_sys_Data.SoundRecorder);
+			recorder_request_start_async();
 #endif
 			if(DVRstaTimer == NULL) DVRstaTimer = lv_timer_create(recorder_status_timer, 1000, NULL); 
 

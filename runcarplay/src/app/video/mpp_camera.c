@@ -16,9 +16,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <sys/syscall.h>
 #include "vo/hwdisplay.h"
 #include "lvgl_main.h"
 #include "g2d_driver.h"
@@ -50,9 +47,6 @@ static ERRORTYPE createAencChn(mpp_camera_para_conf *pContext);
 static ERRORTYPE createVenc_picChn(mpp_camera_para_conf *pContext);
 static void destoryVenc_picChn(mpp_camera_para_conf *pContext);
 static void savePic(mpp_camera_para_conf *pContext);
-static void cleanup_recording_partial(mpp_camera_para_conf *pContext, int ai_ok, int aenc_ok, int venc_ok, int mux_ok, int prepared_ok, int started_ok);
-static void mux_refresh_fsync_fd_locked(mpp_camera_para_conf *pContext);
-static void mpp_camera_set_storage_fault(const char *reason);
 
 #ifndef AWALIGN
 #define AWALIGN(x, a)              ((a) * (((x) + (a) - 1) / (a)))
@@ -60,7 +54,7 @@ static void mpp_camera_set_storage_fault(const char *reason);
 
 #define AI2MUX 
 #define TACKPIC
-#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (256*1024)
+#define DEFAULT_SIMPLE_CACHE_SIZE_VFS       (64*1024)
 #define ISP_RUN (1)
 
 extern int g_g2dfd;
@@ -73,160 +67,6 @@ extern QueueMpp *F_picFile;
 extern QueueMpp *R_picFile;
 
 pthread_mutex_t Vi2Vomutex = PTHREAD_MUTEX_INITIALIZER;
-
-/*
- * Debug switches (runtime via env):
- * 1) MPP_DBG_SINGLE_REC_CH=1      -> only keep recorder on vi dev 0
- * 2) MPP_DBG_DISABLE_FSYNC=1      -> skip fsync helper thread
- * 3) MPP_DBG_DISABLE_PREVIEW_G2D=1-> skip preview G2D/VO path
- */
-static int g_dbg_single_rec_ch = 0;
-static int g_dbg_disable_fsync = 0;
-static int g_dbg_disable_preview_g2d = 0;
-static int g_dbg_fsync_interval_ms = 3000;
-static int g_rec_audio_enable = 0;
-static int g_rec_bitrate = 2 * 1024 * 1024;
-static int g_enable_fsync = 0;
-static int g_dbg_switches_inited = 0;
-static volatile int g_mpp_storage_fault = 0;
-static long long g_last_storage_fault_log_ms = 0;
-static int g_cp_perf_enable = -1;
-static int g_cp_perf_warn_us = 20000;
-
-typedef struct {
-    long long win_start_us;
-    unsigned int vi_cnt;
-    unsigned int vi_fail;
-    unsigned long long vi_wait_us;
-    unsigned int venc_cnt;
-    unsigned int venc_fail;
-    unsigned long long venc_cost_us;
-    unsigned int fsync_cnt;
-    unsigned int fsync_fail;
-    unsigned long long fsync_cost_us;
-} mpp_cp_perf_stat_t;
-
-static long long monotonic_ms_now(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
-}
-
-static long long monotonic_us_now(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
-}
-
-static long long thread_tid_now(void)
-{
-    return (long long)syscall(SYS_gettid);
-}
-
-static void cp_perf_init_once(void)
-{
-    if (g_cp_perf_enable >= 0) {
-        return;
-    }
-    {
-        const char *en = getenv("CP_PERF_ENABLE");
-        /* Unset or empty -> off; "0" -> off; any non-zero integer -> on */
-        g_cp_perf_enable = (en && en[0] != '\0' && atoi(en) != 0) ? 1 : 0;
-    }
-    const char *warn_us = getenv("CP_PERF_WARN_US");
-    if (warn_us && warn_us[0] != '\0') {
-        int v = atoi(warn_us);
-        if (v > 0) {
-            g_cp_perf_warn_us = v;
-        }
-    }
-}
-
-#define MPP_CP_LOG(stage, fmt, ...) \
-    do { \
-        cp_perf_init_once(); \
-        if (g_cp_perf_enable) { \
-            printf("[cp_perf] ts_us=%lld tid=%lld stage=%s sid=0 " fmt "\n", \
-                   monotonic_us_now(), thread_tid_now(), stage, ##__VA_ARGS__); \
-        } \
-    } while (0)
-
-static void mpp_cp_stat_flush(const char *stage, mpp_cp_perf_stat_t *s)
-{
-    long long now = monotonic_us_now();
-    if (s->win_start_us == 0) {
-        s->win_start_us = now;
-        return;
-    }
-    if (now - s->win_start_us < 1000000LL) {
-        return;
-    }
-    MPP_CP_LOG(stage,
-               "win_us=%lld vi_cnt=%u vi_fail=%u vi_avg_wait_us=%llu venc_cnt=%u venc_fail=%u venc_avg_cost_us=%llu fsync_cnt=%u fsync_fail=%u fsync_avg_cost_us=%llu",
-               now - s->win_start_us,
-               s->vi_cnt, s->vi_fail, s->vi_cnt ? (s->vi_wait_us / s->vi_cnt) : 0ULL,
-               s->venc_cnt, s->venc_fail, s->venc_cnt ? (s->venc_cost_us / s->venc_cnt) : 0ULL,
-               s->fsync_cnt, s->fsync_fail, s->fsync_cnt ? (s->fsync_cost_us / s->fsync_cnt) : 0ULL);
-    memset(s, 0, sizeof(*s));
-    s->win_start_us = now;
-}
-
-static void mpp_camera_set_storage_fault(const char *reason)
-{
-    g_mpp_storage_fault = 1;
-    long long now = monotonic_ms_now();
-    if (now - g_last_storage_fault_log_ms > 2000) {
-        g_last_storage_fault_log_ms = now;
-        printf("[mpp] storage fault: %s (errno=%d)\n", reason ? reason : "unknown", errno);
-    }
-}
-
-int mpp_camera_take_storage_fault(void)
-{
-    if (g_mpp_storage_fault) {
-        g_mpp_storage_fault = 0;
-        return 1;
-    }
-    return 0;
-}
-
-static void mpp_debug_switches_init_once(void)
-{
-    if (g_dbg_switches_inited) {
-        return;
-    }
-    g_dbg_switches_inited = 1;
-    g_dbg_single_rec_ch = (getenv("MPP_DBG_SINGLE_REC_CH") != NULL);
-    g_dbg_disable_fsync = (getenv("MPP_DBG_DISABLE_FSYNC") != NULL);
-    g_dbg_disable_preview_g2d = (getenv("MPP_DBG_DISABLE_PREVIEW_G2D") != NULL);
-    g_enable_fsync = (getenv("MPP_ENABLE_FSYNC") != NULL);
-    g_rec_audio_enable = (getenv("MPP_REC_ENABLE_AUDIO") != NULL);
-
-    const char *rec_bitrate = getenv("MPP_REC_BITRATE");
-    if (rec_bitrate && rec_bitrate[0] != '\0') {
-        int bps = atoi(rec_bitrate);
-        if (bps >= 1024 * 1024 && bps <= 16 * 1024 * 1024) {
-            g_rec_bitrate = bps;
-        }
-    }
-    const char *fsync_interval = getenv("MPP_DBG_FSYNC_INTERVAL_MS");
-    if (fsync_interval && fsync_interval[0] != '\0') {
-        int ms = atoi(fsync_interval);
-        if (ms >= 50 && ms <= 10000) {
-            g_dbg_fsync_interval_ms = ms;
-        }
-    }
-    if (g_dbg_disable_fsync) {
-        g_enable_fsync = 0;
-    }
-
-    printf("[mpp_cfg] rec_audio=%d rec_bitrate=%d enable_fsync=%d\n",
-           g_rec_audio_enable, g_rec_bitrate, g_enable_fsync);
-    printf("[mpp_dbg] switches: single_rec_ch=%d, disable_fsync=%d, disable_preview_g2d=%d, fsync_interval_ms=%d\n",
-           g_dbg_single_rec_ch, g_dbg_disable_fsync, g_dbg_disable_preview_g2d, g_dbg_fsync_interval_ms);
-}
 
 static int G2D_Convert_rotate(VIDEO_FRAME_INFO_S *src ,VIDEO_FRAME_INFO_S *dst,int rotate){
     // printf("%s:%d\n",__func__,__LINE__);
@@ -409,19 +249,24 @@ static int G2D_Convert_Scale(VIDEO_FRAME_INFO_S *src ,VIDEO_FRAME_INFO_S *dst){
 static void *Vi2VencFrameThread(void *pThreadData)
 {
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
+
     int ret = 0;
-    mpp_cp_perf_stat_t stat;
-    memset(&stat, 0, sizeof(stat));
     
     // 1. 创建双缓冲避免竞争
+
+    
     while (pContext->mExitFlag == 0)
     {
+
+        
         if (pContext->mRecorderFlag) {
             if (queue_mpp_empty(pContext->m_vo.mppQueue)) {
                 usleep(1000); // 缩短休眠时间
                 continue;
             }
+            
             VIDEO_FRAME_INFO_S *FrameInfo = (VIDEO_FRAME_INFO_S *)queue_mpp_pop(pContext->m_vo.mppQueue);
+        
 #ifdef TACKPIC        
         if(pContext->mTakePicFlag){
             ret = AW_MPI_VENC_SendFrame(pContext->m_venc_pic.mVEncChn, FrameInfo, 0);
@@ -433,24 +278,21 @@ static void *Vi2VencFrameThread(void *pThreadData)
             pContext->mTakePicFlag = 0;
         }
 #endif  
-            long long venc_t0 = monotonic_us_now();
+
             ret = AW_MPI_VENC_SendFrame(pContext->m_venc.mVEncChn, FrameInfo, 0);
-            long long venc_cost = monotonic_us_now() - venc_t0;
-            stat.venc_cnt++;
-            stat.venc_cost_us += (unsigned long long)venc_cost;
-            if (venc_cost > g_cp_perf_warn_us) {
-                MPP_CP_LOG("mpp_venc_warn", "cost_us=%lld ret=%d", venc_cost, ret);
-            }
             if (ret < 0)
             {
-                stat.venc_fail++;
                 printf("fatal error, venc send frame sync failed!\n");
             }
+            
+            
         } else {
             usleep(1000000); // 1000ms
         }
-        mpp_cp_stat_flush("mpp_venc_thread", &stat);
+        
     }
+    
+  
     return NULL;
 }
 #else
@@ -462,47 +304,30 @@ static void *Vi2VencFrameThread(void *pThreadData)
 static void *FsyncFrameThread(void *pThreadData)
 {
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
-    int sleep_us = g_dbg_fsync_interval_ms * 1000;
-    mpp_cp_perf_stat_t stat;
-    memset(&stat, 0, sizeof(stat));
     while (pContext->mExitFlag == 0)
     {    
         
         if(pContext->mRecorderFlag){
             pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
-            int fd = pContext->m_mux.fsyncFd;
-            pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
-            if (fd >= 0) {
-                long long t0 = monotonic_us_now();
-                int fs_ret = fsync(fd);
-                long long cost = monotonic_us_now() - t0;
-                stat.fsync_cnt++;
-                stat.fsync_cost_us += (unsigned long long)cost;
-                if (cost > g_cp_perf_warn_us) {
-                    MPP_CP_LOG("mpp_fsync_warn", "fd=%d cost_us=%lld ret=%d", fd, cost, fs_ret);
-                }
-                if (fs_ret != 0) {
-                    stat.fsync_fail++;
-                    mpp_camera_set_storage_fault("fsync failed");
-                }
+            int fd = open(pContext->m_mux.dstVideoFile, O_RDONLY);
+            if(fd){
+                pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
+                fsync(fd);
+                close(fd);
             }
-            usleep(sleep_us);
+            sleep(1);
         }else{
             sleep(1);
         }
-        mpp_cp_stat_flush("mpp_fsync_thread", &stat);
     }
-    return NULL;
+    return;
 }
 
 static void *GetCSIFrameThread(void *pThreadData)
 {
     long lastTime = 0;
     mpp_camera_para_conf *pContext = (mpp_camera_para_conf*)pThreadData;
-    mpp_debug_switches_init_once();
     int ret = 0;
-    mpp_cp_perf_stat_t stat;
-    memset(&stat, 0, sizeof(stat));
     VIDEO_FRAME_INFO_S stFrameInfo;
     VENC_JPEG_THUMB_BUFFER_S mJpegThumbBuf;
     pContext->m_vo.mppQueue = queue_mpp_create();
@@ -631,21 +456,14 @@ static void *GetCSIFrameThread(void *pThreadData)
     while (pContext->mExitFlag == 0)
     {      
  
-        long long vi_t0 = monotonic_us_now();
         if ((ret = AW_MPI_VI_GetFrame(pContext->m_vi.mViDev, pContext->m_vi.mViChn, &stFrameInfo, 500)) < 0)
         {
-            stat.vi_fail++;
             printf("fatal error, vi get frame failed!\n");
             continue;
         }
-        stat.vi_cnt++;
-        stat.vi_wait_us += (unsigned long long)(monotonic_us_now() - vi_t0);
 
         // printf("stFrameInfo.VFrame.mOffsetBottom:%d,stFrameInfo.VFrame.mOffsetTop:%d,stFrameInfo.VFrame.mOffsetLeft:%d,stFrameInfo.VFrame.mOffsetRight:%d",stFrameInfo.VFrame.mOffsetBottom,stFrameInfo.VFrame.mOffsetTop,stFrameInfo.VFrame.mOffsetLeft,stFrameInfo.VFrame.mOffsetRight);
-        if (pContext->mVoFlag) {
-            if (g_dbg_disable_preview_g2d) {
-                /* Debug mode: skip preview conversion/display load entirely. */
-            } else {
+        if(pContext->mVoFlag){          
             // 将缓冲区推入队列
             pthread_mutex_lock(&Vi2Vomutex);
             ret = G2D_Convert_Scale(&stFrameInfo, dstScaBuf);
@@ -665,7 +483,6 @@ static void *GetCSIFrameThread(void *pThreadData)
                 printf("fatal error, venc_pic send frame sync failed!\n");
             }
             currentBuffer = (currentBuffer + 1) % 2;
-            }
         }
     
         if(pContext->mRecorderFlag){
@@ -678,7 +495,6 @@ static void *GetCSIFrameThread(void *pThreadData)
         {
             printf("fatal error, vi release frame failed!\n");
         }
-        mpp_cp_stat_flush("mpp_vi_thread", &stat);
     }
 mem_err:
     // 正确释放内存
@@ -844,7 +660,6 @@ static int setNextFileToMuxer(mpp_camera_para_conf *pRecorder, char* path, int64
         if (fd < 0)
         {
             printf("fatal error! fail to open %s\n", path);
-            mpp_camera_set_storage_fault("setNextFileToMuxer open failed");
             return -1;
         }
 
@@ -854,7 +669,6 @@ static int setNextFileToMuxer(mpp_camera_para_conf *pRecorder, char* path, int64
             if(ret != SUCCESS)
             {
                 printf("fatal error! muxChn[%d] switch fd[%d] fail[0x%x]!\n", pRecorder->m_mux.mMuxChn, fd, ret);
-                mpp_camera_set_storage_fault("AW_MPI_MUX_SwitchFd failed");
                 result = -1;
             }
         }
@@ -1017,7 +831,6 @@ static ERRORTYPE InitMppCameraData(mpp_camera_para_conf *pContext){
     pContext->m_venc.mVEncChn = MM_INVALID_CHN;
     pContext->m_venc_pic.mVEncChn = MM_INVALID_CHN;
     pContext->m_mux.mMuxChn = MM_INVALID_CHN;
-    pContext->m_mux.fsyncFd = -1;
     pContext->m_ai.mAiChn.mChnId = MM_INVALID_CHN;
     pContext->m_aenc.mAEncChn.mChnId = MM_INVALID_CHN;
 
@@ -1040,13 +853,13 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
     pContext->m_vi.mViDropFrameNum = 0;
     pContext->m_vi.mEnableWDR = 0;
 
-    // pContext->m_vo.mDispType = VO_INTF_LCD;
-    // pContext->m_vo.mDispSync = VO_OUTPUT_NTSC;
+    pContext->m_vo.mDispType = VO_INTF_LCD;
+    pContext->m_vo.mDispSync = VO_OUTPUT_NTSC;
 
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
     pContext->m_venc.mFrameRate = 25;
-    pContext->m_venc.mBitRate = g_rec_bitrate;
+    pContext->m_venc.mBitRate = 1048576 * 8;
     pContext->m_venc.mRcMode = 0;
     pContext->m_venc.mEncoderFmt = PT_H264;
 
@@ -1199,7 +1012,6 @@ static ERRORTYPE MPPCallbackWrapper(void *cookie, MPP_CHN_S *pChn, MPP_EVENT_TYP
             default:
             {
                 printf("fatal error! unknown event[0x%x]\n", event);
-                mpp_camera_set_storage_fault("mux unknown event");
                 break;
             }
         }
@@ -1762,29 +1574,18 @@ static ERRORTYPE configVencChnAttr(mpp_camera_para_conf *pContext, VENC_CHN_ATTR
     {
         case PT_H264:
         {
-#if 1
-            pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
-            pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
-            pVencChnAttr->VeAttr.AttrH264e.Profile = 0;//0:base 1:main 2:high
-            pVencChnAttr->VeAttr.AttrH264e.bByFrame = TRUE;
-            pVencChnAttr->VeAttr.AttrH264e.PicWidth  = pContext->m_venc.mWidth;
-            pVencChnAttr->VeAttr.AttrH264e.PicHeight = pContext->m_venc.mHeight;
-            pVencChnAttr->VeAttr.AttrH264e.mLevel = H264_LEVEL_51;
-            pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = TRUE;
-            pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
-            pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = FALSE;
-#else
             pVencChnAttr->VeAttr.AttrH264e.mThreshSize = AWALIGN((pContext->m_venc.mWidth*pContext->m_venc.mHeight*3/2)/3, 1024);
             pVencChnAttr->VeAttr.AttrH264e.BufSize = AWALIGN(pContext->m_venc.mBitRate*4/8 + pVencChnAttr->VeAttr.AttrH264e.mThreshSize, 1024);
             pVencChnAttr->VeAttr.AttrH264e.Profile = 2;//0:base 1:main 2:high
+            // pVencChnAttr->VeAttr.AttrH264e.Profile = 0;//0:base 1:main 2:high
             pVencChnAttr->VeAttr.AttrH264e.bByFrame = TRUE;
             pVencChnAttr->VeAttr.AttrH264e.PicWidth  = pContext->m_venc.mWidth;
             pVencChnAttr->VeAttr.AttrH264e.PicHeight = pContext->m_venc.mHeight;
             pVencChnAttr->VeAttr.AttrH264e.mLevel = H264_LEVEL_51;
             pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = FALSE;
+            // pVencChnAttr->VeAttr.AttrH264e.FastEncFlag = TRUE;
             pVencChnAttr->VeAttr.AttrH264e.IQpOffset = 0;
             pVencChnAttr->VeAttr.AttrH264e.mbPIntraEnable = TRUE;
-#endif
             break;
         }
         case PT_H265:
@@ -1961,12 +1762,6 @@ static ERRORTYPE createVencChn(mpp_camera_para_conf *pContext)
     memset(&pContext->m_venc.mVencRcParam, 0, sizeof(VENC_RC_PARAM_S));
 
     configVencChnAttr(pContext, &pContext->m_venc.mVEncAttr, &pContext->m_venc.mVencRcParam);
-    MPP_CP_LOG("rec_venc_cfg",
-               "viDev=%d src=%dx%d src_fps=%d venc=%dx%d dst_fps=%d bitrate=%d rcMode=%d encType=%d",
-               pContext->m_vi.mViDev,
-               pContext->m_vi.mWidth, pContext->m_vi.mHeight, pContext->m_vi.mFrameRate,
-               pContext->m_venc.mWidth, pContext->m_venc.mHeight, pContext->m_venc.mFrameRate,
-               pContext->m_venc.mBitRate, pContext->m_venc.mRcMode, pContext->m_venc.mEncoderFmt);
     pContext->m_venc.mVEncChn = 0;
 
     while (pContext->m_venc.mVEncChn < VENC_MAX_CHN_NUM)
@@ -2004,18 +1799,10 @@ static ERRORTYPE createVencChn(mpp_camera_para_conf *pContext)
         stFrameRate.SrcFrmRate = pContext->m_vi.mFrameRate;
         stFrameRate.DstFrmRate = pContext->m_venc.mFrameRate;
         printf("set srcFrameRate:%d, venc framerate:%d\n", stFrameRate.SrcFrmRate, stFrameRate.DstFrmRate);
-        if (stFrameRate.DstFrmRate <= 0) {
-            MPP_CP_LOG("rec_venc_bad_fps",
-                       "vencChn=%d src_fps=%d dst_fps=%d",
-                       pContext->m_venc.mVEncChn, stFrameRate.SrcFrmRate, stFrameRate.DstFrmRate);
-        }
         ret = AW_MPI_VENC_SetFrameRate(pContext->m_venc.mVEncChn, &stFrameRate);
         if(ret != SUCCESS)
         {
             printf("fatal error! venc set framerate fail[0x%x]!\n", ret);
-            MPP_CP_LOG("rec_venc_set_fps_fail",
-                       "vencChn=%d src_fps=%d dst_fps=%d ret=0x%x",
-                       pContext->m_venc.mVEncChn, stFrameRate.SrcFrmRate, stFrameRate.DstFrmRate, ret);
         }
 
         MPPCallbackInfo cbInfo;
@@ -2038,9 +1825,10 @@ static ERRORTYPE configMuxChnAttr(mpp_camera_para_conf *pContext, MUX_CHN_ATTR_S
     pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mVideoEncodeType = pContext->m_venc.mEncoderFmt;
     pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mWidth = pContext->m_venc.mWidth;
     pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mHeight = pContext->m_venc.mHeight;
+    // pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mWidth = 3840;
+    // pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mHeight = 2160;
     pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mVideoFrmRate = pContext->m_venc.mFrameRate*1000;
     pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mVeChn = pContext->m_venc.mVEncChn;
-
     
     pContext->m_mux.mMuxChnAttr.mTextEncodeType = PT_MAX;
 
@@ -2096,13 +1884,6 @@ static ERRORTYPE createMuxChn(mpp_camera_para_conf *pContext)
     
     memset(&pContext->m_mux.mMuxChnAttr, 0, sizeof(MUX_CHN_ATTR_S));
     configMuxChnAttr(pContext, &pContext->m_mux.mMuxChnAttr);
-    MPP_CP_LOG("rec_mux_cfg",
-               "vencChn=%d muxVideoFps_x1000=%d fmt=%d fsWriteMode=%d cache=%d",
-               pContext->m_venc.mVEncChn,
-               pContext->m_mux.mMuxChnAttr.mVideoAttr[0].mVideoFrmRate,
-               pContext->m_mux.mMuxChnAttr.mMediaFileFormat,
-               pContext->m_mux.mMuxChnAttr.mFsWriteMode,
-               pContext->m_mux.mMuxChnAttr.mSimpleCacheSize);
     creatVideoPathAndPicPath();
     pContext->m_mux.eFileFormat = pContext->m_mux.mMuxChnAttr.mMediaFileFormat;
     pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
@@ -2111,10 +1892,8 @@ static ERRORTYPE createMuxChn(mpp_camera_para_conf *pContext)
     if (nFd < 0)
     {
         printf("fatal error! Failed to open %s\n", pContext->m_mux.dstVideoFile);
-        mpp_camera_set_storage_fault("createMuxChn open failed");
         // goto err_openfile;
     }  
-    mux_refresh_fsync_fd_locked(pContext);
     pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
     pContext->m_mux.mMuxChn = 0;
     while (pContext->m_mux.mMuxChn < MUX_MAX_CHN_NUM)
@@ -2140,16 +1919,6 @@ static ERRORTYPE createMuxChn(mpp_camera_para_conf *pContext)
 
     if (FALSE == nSuccessFlag)
     {
-        if (nFd >= 0) {
-            close(nFd);
-            nFd = -1;
-        }
-        pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
-        if (pContext->m_mux.fsyncFd >= 0) {
-            close(pContext->m_mux.fsyncFd);
-            pContext->m_mux.fsyncFd = -1;
-        }
-        pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
         pContext->m_mux.mMuxChn = MM_INVALID_CHN;
         printf("fatal error! create mux channel fail!\n");
         return FAILURE;
@@ -2501,22 +2270,17 @@ static ERRORTYPE prepare(mpp_camera_para_conf *pContext){
 //------------------------------------------------------------------------------------
     setOverlayToVencChn(pContext);
 
-    if(g_rec_audio_enable &&
-       pContext->m_ai.mAiChn.mChnId >= 0 &&
-       pContext->m_aenc.mAEncChn.mChnId >= 0 &&
-       pContext->m_mux.mMuxChn >= 0){
+    if(pContext->m_ai.mAiChn.mChnId >= 0 && pContext->m_aenc.mAEncChn.mChnId >= 0 && pContext->m_mux.mMuxChn >= 0){
         AW_MPI_SYS_Bind(&pContext->m_ai.mAiChn, &pContext->m_aenc.mAEncChn);
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
         AW_MPI_SYS_Bind(&pContext->m_aenc.mAEncChn, &MuxChn);
     }
 
-    if (g_rec_audio_enable) {
-        result = AW_MPI_AI_EnableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
-        if (result != SUCCESS)
-        {
-            printf("AI enable error!\n");
-            return result;
-        }
+    result = AW_MPI_AI_EnableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
+    if (result != SUCCESS)
+    {
+        printf("AI enable error!\n");
+        return result;
     }
     return SUCCESS;
 }
@@ -2527,25 +2291,10 @@ static ERRORTYPE startVideoRecording(mpp_camera_para_conf *pContext){
     printf("%s:%d\n",__func__,__LINE__);
     if (pContext->m_mux.mMuxChn >= 0)
     {
-        long long t0 = monotonic_us_now();
         pContext->mRecorderFlag = 1;
-        ERRORTYPE ret_venc = AW_MPI_VENC_StartRecvPic(pContext->m_venc.mVEncChn);
-        long long venc_us = monotonic_us_now() - t0;
-        MPP_CP_LOG("rec_start_venc",
-                   "vencChn=%d ret=0x%x cost_us=%lld",
-                   pContext->m_venc.mVEncChn, ret_venc, venc_us);
-        if (g_rec_audio_enable) {
-            ERRORTYPE ret_aenc = AW_MPI_AENC_StartRecvPcm(pContext->m_aenc.mAEncChnId);
-            MPP_CP_LOG("rec_start_aenc",
-                       "aencChn=%d ret=0x%x",
-                       pContext->m_aenc.mAEncChnId, ret_aenc);
-        }
-        long long t1 = monotonic_us_now();
-        ERRORTYPE ret_mux = AW_MPI_MUX_StartChn(pContext->m_mux.mMuxChn);
-        long long mux_us = monotonic_us_now() - t1;
-        MPP_CP_LOG("rec_start_mux",
-                   "muxChn=%d ret=0x%x cost_us=%lld total_us=%lld",
-                   pContext->m_mux.mMuxChn, ret_mux, mux_us, monotonic_us_now() - t0);
+        AW_MPI_VENC_StartRecvPic(pContext->m_venc.mVEncChn);
+        AW_MPI_AENC_StartRecvPcm(pContext->m_aenc.mAEncChnId); 
+        AW_MPI_MUX_StartChn(pContext->m_mux.mMuxChn);
 
     }
     return SUCCESS;
@@ -2555,19 +2304,11 @@ static ERRORTYPE startVideoRecording(mpp_camera_para_conf *pContext){
 static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
     printf("%s:%d\n",__func__,__LINE__);
     pContext->mRecorderFlag = 0;
-    pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
-    if (pContext->m_mux.fsyncFd >= 0) {
-        close(pContext->m_mux.fsyncFd);
-        pContext->m_mux.fsyncFd = -1;
-    }
-    pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
     pthread_mutex_destroy(&pContext->m_mux.fsyncMutex);
     destroyTimestampOverlay(pContext);
     AW_MPI_MUX_StopChn(pContext->m_mux.mMuxChn, FALSE);
     AW_MPI_VENC_StopRecvPic(pContext->m_venc.mVEncChn);
-    if (g_rec_audio_enable) {
-        AW_MPI_AENC_StopRecvPcm(pContext->m_aenc.mAEncChnId);
-    }
+    AW_MPI_AENC_StopRecvPcm(pContext->m_aenc.mAEncChnId);
     if (pContext->m_venc.mVEncChn >= 0 && pContext->m_mux.mMuxChn >= 0)
     {
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
@@ -2575,10 +2316,7 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
 
         AW_MPI_SYS_UnBind(&VeChn, &MuxChn);
     }
-    if(g_rec_audio_enable &&
-       pContext->m_ai.mAiChn.mChnId >= 0 &&
-       pContext->m_aenc.mAEncChn.mChnId >= 0 &&
-       pContext->m_mux.mMuxChn >= 0){
+    if(pContext->m_ai.mAiChn.mChnId >= 0 && pContext->m_aenc.mAEncChn.mChnId >= 0 && pContext->m_mux.mMuxChn >= 0){  
         MPP_CHN_S MuxChn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
         AW_MPI_SYS_UnBind(&pContext->m_aenc.mAEncChn, &MuxChn);
         AW_MPI_AI_DisableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
@@ -2587,10 +2325,8 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
 
     AW_MPI_MUX_DestroyChn(pContext->m_mux.mMuxChn);
     AW_MPI_VENC_DestroyChn(pContext->m_venc.mVEncChn);
-    if (g_rec_audio_enable) {
-        AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId);
-        AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
-    }
+    AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId); 
+    AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
 
    
     return SUCCESS;
@@ -2600,7 +2336,6 @@ static ERRORTYPE stopVideoRecording(mpp_camera_para_conf *pContext){
 
 ERRORTYPE initVi(mpp_camera_para_conf *pContext, VI_DEV videv, VI_CHN vichn){
     printf("%s:%d\n",__func__,__LINE__);
-    mpp_debug_switches_init_once();
     InitMppCameraData(pContext);
     setConfigPara(pContext);
     createViChn(pContext, videv, vichn);
@@ -2618,20 +2353,15 @@ ERRORTYPE initVi(mpp_camera_para_conf *pContext, VI_DEV videv, VI_CHN vichn){
     }
 #endif
 
-    if (g_enable_fsync) {
-        ret = pthread_create(&pContext->mfsyncThreadId, NULL, FsyncFrameThread, pContext);
-        if (ret != 0)
-        {
-            printf("fatal error! create FsyncFrameThread Thread fail[%d]\n", ret);
-            return ret;
-        }
-        else
-        {
-            printf("create FsyncFrameThread Thread success! threadId[0x%x]\n", &pContext->mfsyncThreadId);
-        }
-    } else {
-        pContext->mfsyncThreadId = 0;
-        printf("[mpp_cfg] FsyncFrameThread disabled\n");
+    ret = pthread_create(&pContext->mfsyncThreadId, NULL, FsyncFrameThread, pContext);
+    if (ret != 0)
+    {
+        printf("fatal error! create FsyncFrameThread Thread fail[%d]\n", ret);
+        return ret;
+    }
+    else
+    {
+        printf("create FsyncFrameThread Thread success! threadId[0x%x]\n", &pContext->mfsyncThreadId);
     }
     return 0;    
 }
@@ -2641,9 +2371,7 @@ ERRORTYPE deinitVi(mpp_camera_para_conf *pContext){
     pContext->mExitFlag = 1;
     pthread_join(pContext->mCSIFrameThreadId, NULL);
     pthread_join(pContext->mVi2VencThreadId, NULL);
-    if (pContext->mfsyncThreadId) {
-        pthread_join(pContext->mfsyncThreadId, NULL);
-    }
+    pthread_join(pContext->mfsyncThreadId, NULL);
     stMsgCmd.command = MsgQueue_Stop;
     put_message(&pContext->mMsgQueue, &stMsgCmd);
     pthread_join(pContext->mMsgQueueThreadId, NULL);
@@ -2658,62 +2386,14 @@ ERRORTYPE deinitVi(mpp_camera_para_conf *pContext){
 
 ERRORTYPE recording(mpp_camera_para_conf *pContext){
     printf("%s:%d\n",__func__,__LINE__);
-    long long rec_t0 = monotonic_us_now();
-    mpp_debug_switches_init_once();
-    if (g_dbg_single_rec_ch && pContext->m_vi.mViDev != 0) {
-        printf("[mpp_dbg] skip recording for vi dev %d by MPP_DBG_SINGLE_REC_CH\n", pContext->m_vi.mViDev);
-        return SUCCESS;
-    }
-    ERRORTYPE ret = SUCCESS;
-    int ai_ok = 0;
-    int aenc_ok = 0;
-    int venc_ok = 0;
-    int mux_ok = 0;
-    int prepared_ok = 0;
-    int started_ok = 0;
-
-    if (g_rec_audio_enable) {
-        ret = createAIChn(pContext, 0, 0);
-        if (ret != SUCCESS) goto fail;
-        ai_ok = 1;
-
-        ret = createAencChn(pContext);
-        if (ret != SUCCESS) goto fail;
-        aenc_ok = 1;
-    } else {
-        pContext->m_ai.mAIChnId = MM_INVALID_CHN;
-        pContext->m_aenc.mAEncChnId = MM_INVALID_CHN;
-    }
-
-    ret = createVencChn(pContext);
-    if (ret != SUCCESS) goto fail;
-    MPP_CP_LOG("rec_step_ok", "step=createVencChn cost_us=%lld", monotonic_us_now() - rec_t0);
-    venc_ok = 1;
-
-    ret = createMuxChn(pContext);
-    if (ret != SUCCESS) goto fail;
-    MPP_CP_LOG("rec_step_ok", "step=createMuxChn cost_us=%lld", monotonic_us_now() - rec_t0);
-    mux_ok = 1;
-
-    ret = prepare(pContext);
-    if (ret != SUCCESS) goto fail;
-    MPP_CP_LOG("rec_step_ok", "step=prepare cost_us=%lld", monotonic_us_now() - rec_t0);
-    prepared_ok = 1;
-
-    ret = startVideoRecording(pContext);
-    if (ret != SUCCESS) goto fail;
-    MPP_CP_LOG("rec_step_ok", "step=startVideoRecording cost_us=%lld", monotonic_us_now() - rec_t0);
-    started_ok = 1;
-    MPP_CP_LOG("rec_start_done",
-               "total_us=%lld viDev=%d vencChn=%d muxChn=%d",
-               monotonic_us_now() - rec_t0,
-               pContext->m_vi.mViDev, pContext->m_venc.mVEncChn, pContext->m_mux.mMuxChn);
-    return SUCCESS;
-
-fail:
-    printf("[mpp] recording setup failed, ret=0x%x\n", ret);
-    cleanup_recording_partial(pContext, ai_ok, aenc_ok, venc_ok, mux_ok, prepared_ok, started_ok);
-    return ret;
+    ERRORTYPE ret = SUCCESS; 
+    createAIChn(pContext, 0, 0);
+    createAencChn(pContext);		
+    createVencChn(pContext);
+    createMuxChn(pContext);
+    prepare(pContext);
+    startVideoRecording(pContext);
+    return ret; 
 }
 
 ERRORTYPE stopRecording(mpp_camera_para_conf *pContext){
@@ -2725,19 +2405,13 @@ ERRORTYPE stopRecording(mpp_camera_para_conf *pContext){
 
 ERRORTYPE changeVideoRecordingMode(mpp_camera_para_conf *pContext){
     printf("%s:%d\n",__func__,__LINE__);
-    ERRORTYPE ret = SUCCESS;
     pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
     getFileNameByCurTime(pContext, pContext->m_mux.dstVideoFile);
     int fd = open(pContext->m_mux.dstVideoFile, O_RDWR | O_CREAT | O_TRUNC, 0666);
-    if (fd >= 0) {
-        mux_refresh_fsync_fd_locked(pContext);
-    }
-    pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
     if(fd < 0){
         printf("open pContext->m_mux.dstVideoFile fail!!\n");
-        mpp_camera_set_storage_fault("changeVideoRecordingMode open failed");
-        return FAILURE;
     }else{
+        pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
         switch (g_sys_Data.recorderMode)
         {
         case RECORDER_NONE:
@@ -2755,61 +2429,6 @@ ERRORTYPE changeVideoRecordingMode(mpp_camera_para_conf *pContext){
         default:
             break;
         }
-        close(fd);
-    }
-    return ret;
-}
-
-static void mux_refresh_fsync_fd_locked(mpp_camera_para_conf *pContext)
-{
-    if (pContext->m_mux.fsyncFd >= 0) {
-        close(pContext->m_mux.fsyncFd);
-        pContext->m_mux.fsyncFd = -1;
-    }
-    pContext->m_mux.fsyncFd = open(pContext->m_mux.dstVideoFile, O_RDONLY);
-    if (pContext->m_mux.fsyncFd < 0) {
-        printf("[mpp] open fsync fd failed for %s\n", pContext->m_mux.dstVideoFile);
-        mpp_camera_set_storage_fault("open fsync fd failed");
-    }
-}
-
-static void cleanup_recording_partial(mpp_camera_para_conf *pContext, int ai_ok, int aenc_ok, int venc_ok, int mux_ok, int prepared_ok, int started_ok)
-{
-    if (started_ok) {
-        stopVideoRecording(pContext);
-        return;
-    }
-
-    if (prepared_ok && venc_ok && mux_ok) {
-        MPP_CHN_S mux_chn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
-        MPP_CHN_S ve_chn = {MOD_ID_VENC, 0, pContext->m_venc.mVEncChn};
-        AW_MPI_SYS_UnBind(&ve_chn, &mux_chn);
-    }
-    if (g_rec_audio_enable && prepared_ok && ai_ok && aenc_ok && mux_ok) {
-        MPP_CHN_S mux_chn = {MOD_ID_MUX, 0, pContext->m_mux.mMuxChn};
-        AW_MPI_SYS_UnBind(&pContext->m_aenc.mAEncChn, &mux_chn);
-        AW_MPI_AI_DisableChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
-        AW_MPI_SYS_UnBind(&pContext->m_ai.mAiChn, &pContext->m_aenc.mAEncChn);
-    }
-
-    if (mux_ok && pContext->m_mux.mMuxChn >= 0) {
-        AW_MPI_MUX_DestroyChn(pContext->m_mux.mMuxChn);
-        pthread_mutex_lock(&pContext->m_mux.fsyncMutex);
-        if (pContext->m_mux.fsyncFd >= 0) {
-            close(pContext->m_mux.fsyncFd);
-            pContext->m_mux.fsyncFd = -1;
-        }
-        pthread_mutex_unlock(&pContext->m_mux.fsyncMutex);
-        pthread_mutex_destroy(&pContext->m_mux.fsyncMutex);
-    }
-    if (venc_ok && pContext->m_venc.mVEncChn >= 0) {
-        AW_MPI_VENC_DestroyChn(pContext->m_venc.mVEncChn);
-    }
-    if (g_rec_audio_enable && aenc_ok && pContext->m_aenc.mAEncChnId >= 0) {
-        AW_MPI_AENC_DestroyChn(pContext->m_aenc.mAEncChnId);
-    }
-    if (g_rec_audio_enable && ai_ok && pContext->m_ai.mAIChnId >= 0) {
-        AW_MPI_AI_DestroyChn(pContext->m_ai.mAIDevId, pContext->m_ai.mAIChnId);
     }
 }
 

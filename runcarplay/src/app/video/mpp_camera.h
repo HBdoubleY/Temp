@@ -159,7 +159,6 @@ typedef struct M_VIPP_MUX
     char dstVideoFile[MAX_FILE_PATH_LEN];
     int mMaxFileDuration;
     pthread_mutex_t fsyncMutex;
-    int fsyncFd;
 }m_vipp_mux;
 
 typedef struct M_VIPP_AI{
@@ -251,7 +250,6 @@ ERRORTYPE stopRecording(mpp_camera_para_conf *pContext);
 ERRORTYPE changeVideoRecordingMode(mpp_camera_para_conf *pContext);
 ERRORTYPE startPreview(mpp_camera_para_conf *pContext, int DstWidth, int DstHeight, int DisplayX, int DisplayY);
 ERRORTYPE stopPreview(mpp_camera_para_conf *pContext);
-int mpp_camera_take_storage_fault(void);
 void dashTimeMark(mpp_camera_para_conf *pContext, bool flag);
 void SoundRecording(mpp_camera_para_conf *pContext, bool flag);
 void startTakePic(mpp_camera_para_conf *pContext);
