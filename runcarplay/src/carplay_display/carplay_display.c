@@ -1599,11 +1599,11 @@ void carplay_touch_send_xy(int screen_x, int screen_y, int is_touch_down)
 {
 	long long t0 = cp_now_us();
 	touch_apply_and_send(screen_x, screen_y, is_touch_down);
-	if (is_touch_down || cpd_touch_recently_active()) {
-		pthread_mutex_lock(&g_fq.mutex);
-		pthread_cond_signal(&g_fq.cond);
-		pthread_mutex_unlock(&g_fq.mutex);
-	}
+	// if (is_touch_down || cpd_touch_recently_active()) {
+	// 	pthread_mutex_lock(&g_fq.mutex);
+	// 	pthread_cond_signal(&g_fq.cond);
+	// 	pthread_mutex_unlock(&g_fq.mutex);
+	// }
 	if ((g_frame_seq % (unsigned long long)CPD_PERF_SAMPLE_N()) == 0ULL) {
 		CPD_LOG("touch_send_xy", "x=%d y=%d down=%d cost_us=%lld",
 		        screen_x, screen_y, is_touch_down, cp_now_us() - t0);

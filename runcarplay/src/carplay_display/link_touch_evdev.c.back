@@ -32,15 +32,13 @@
 #define LINK_TOUCH_LOGICAL_W 1440
 #define LINK_TOUCH_LOGICAL_H 720
 
-/* 超时释放时间（毫秒）- 参考 evdev.c 的 100ms */
-#define LINK_TOUCH_NOISE_FILTER_TIME_MS 100
-
 /* Default until carplay_link_touch_configure(); must match lv_disp_drv hor/ver + rotated */
 static int g_disp_hor = 1440;
 static int g_disp_ver = 720;
 static int g_disp_rot; /* 0=LV_DISP_ROT_NONE, 1=90, 2=180, 3=270 — same as lv_disp_rot_t */
 
-#define TOUCH_MOVE_THRESHOLD_DEFAULT 3
+#define TOUCH_MOVE_THRESHOLD_DEFAULT 1
+#define EVDEV_NOISE_FILTER_TIME_MS_DEFAULT 25
 
 #define ST_REL 0
 #define ST_PR  1
@@ -60,6 +58,7 @@ static int g_last_valid_x;
 static int g_last_valid_y;
 static int g_touch_move_threshold = TOUCH_MOVE_THRESHOLD_DEFAULT;
 static int g_touch_move_threshold_sq = TOUCH_MOVE_THRESHOLD_DEFAULT * TOUCH_MOVE_THRESHOLD_DEFAULT;
+static int g_noise_filter_time_ms = EVDEV_NOISE_FILTER_TIME_MS_DEFAULT;
 
 static pthread_t g_thread;
 static int g_thread_started;
@@ -67,8 +66,8 @@ static unsigned long long g_touch_seq;
 static unsigned long long g_noise_filter_release_cnt;
 static unsigned long long g_move_suppress_cnt;
 static long long g_batch_first_event_us;
-static long long g_last_touch_emit_us;
 static long long g_last_poll_wakeup_us;
+static long long g_last_touch_emit_us;
 
 #if CP_PERF_COMPILE
 #define CPT_PERF_ENABLED() zlink_client_perf_is_enabled()
@@ -89,13 +88,6 @@ static long long link_touch_now_us(void)
 	return (long long)tv.tv_sec * 1000000LL + (long long)tv.tv_usec;
 }
 
-static long long link_touch_now_ms(void)
-{
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
-}
-
 #if CP_PERF_COMPILE
 static long long link_touch_tid(void)
 {
@@ -110,6 +102,13 @@ static long long link_touch_tid(void)
 			       link_touch_now_us(), link_touch_tid(), stage, CPT_PERF_SESSION_ID(), ##__VA_ARGS__); \
 		} \
 	} while (0)
+
+static long long link_touch_now_ms(void)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
+}
 
 static void link_touch_load_tuning(void)
 {
@@ -126,11 +125,11 @@ static void link_touch_load_tuning(void)
 	if (nf && nf[0] != '\0') {
 		int v = atoi(nf);
 		if (v >= 0 && v <= 200) {
-			/* 允许环境变量覆盖，但默认使用 100ms */
+			g_noise_filter_time_ms = v;
 		}
 	}
 	printf("link_touch tuning: move_threshold=%dpx noise_filter=%dms\n",
-	       g_touch_move_threshold, LINK_TOUCH_NOISE_FILTER_TIME_MS);
+	       g_touch_move_threshold, g_noise_filter_time_ms);
 }
 
 static int open_link_evdev_fd(void)
@@ -138,12 +137,17 @@ static int open_link_evdev_fd(void)
 	int fd;
 
 	if (access(LINK_TOUCH_EVDEV_FALLBACK, F_OK) == 0)
-		fd = open(LINK_TOUCH_EVDEV_FALLBACK, O_RDWR | O_NOCTTY | O_NONBLOCK);
+		fd = open(LINK_TOUCH_EVDEV_FALLBACK, O_RDWR | O_NOCTTY);
 	else
-		fd = open(LINK_TOUCH_EVDEV_DEFAULT, O_RDWR | O_NOCTTY | O_NONBLOCK);
+		fd = open(LINK_TOUCH_EVDEV_DEFAULT, O_RDWR | O_NOCTTY);
 	if (fd < 0) {
 		perror("link_touch: open evdev");
 		return -1;
+	}
+	{
+		int fl = fcntl(fd, F_GETFL, 0);
+		if (fl >= 0)
+			fcntl(fd, F_SETFL, fl | O_NONBLOCK);
 	}
 	return fd;
 }
@@ -200,7 +204,8 @@ static void emit_link_touch_locked(int x, int y, int cur_pr)
 		if (!g_tracking) {
 			clamp_logical_xy(&x, &y);
 			carplay_touch_send_xy(x, y, 1);
-			carplay_touch_send_xy(x, y, 1);
+			// carplay_touch_send_xy(x, y, 1);
+			// carplay_touch_send_xy(x, y, 1);
 			g_seq_x = x;
 			g_seq_y = y;
 			g_tracking = 1;
@@ -212,7 +217,8 @@ static void emit_link_touch_locked(int x, int y, int cur_pr)
 			if (dist_sq > g_touch_move_threshold_sq) {
 				clamp_logical_xy(&x, &y);
 				carplay_touch_send_xy(x, y, 1);
-				carplay_touch_send_xy(x, y, 1);
+				// carplay_touch_send_xy(x, y, 1);
+				// carplay_touch_send_xy(x, y, 1);
 				g_seq_x = x;
 				g_seq_y = y;
 			} else {
@@ -221,19 +227,29 @@ static void emit_link_touch_locked(int x, int y, int cur_pr)
 		}
 	} else {
 		if (g_tracking) {
-			clamp_logical_xy(&x, &y);
+#if 1
+			clamp_logical_xy(&x, &y);  // 用传入的x,y
 			carplay_touch_send_xy(x, y, 0);
-            usleep(2000);
+			usleep(2000);
 			carplay_touch_send_xy(x, y, 0);
 			g_tracking = 0;
-			g_seq_x = x;
+			g_seq_x = x;  // 同步更新
 			g_seq_y = y;
+#else
+			carplay_touch_send_xy(g_seq_x, g_seq_y, 0);
+			carplay_touch_send_xy(g_seq_x, g_seq_y, 0);
+			g_tracking = 0;
+#endif
 		}
 	}
 }
 
 static void process_input_event(const struct input_event *in)
 {
+	if (g_batch_first_event_us == 0)
+		g_batch_first_event_us = link_touch_now_us();
+	g_last_event_time_ms = link_touch_now_ms();
+
 	if (in->type == EV_REL) {
 		if (in->code == REL_X) {
 #if LINK_TOUCH_SWAP_AXES
@@ -299,39 +315,26 @@ static void process_input_event(const struct input_event *in)
 				g_evdev_button = ST_PR;
 		}
 	}
-}
 
-static void check_and_force_release(long long now_ms)
-{
-	/* 参考 evdev.c 的超时释放逻辑 */
-	if (g_evdev_button == ST_PR && (now_ms - g_last_event_time_ms) > LINK_TOUCH_NOISE_FILTER_TIME_MS) {
-		pthread_mutex_lock(&g_touch_mutex);
-		if (g_tracking) {
-			/* 强制发送抬起事件 */
-			clamp_logical_xy(&g_last_valid_x, &g_last_valid_y);
-			carplay_touch_send_xy(g_last_valid_x, g_last_valid_y, 0);
-			carplay_touch_send_xy(g_last_valid_x, g_last_valid_y, 0);
-			g_tracking = 0;
-			g_noise_filter_release_cnt++;
-			CPT_LOG("force_release", "noise_timeout_ms=%lld seq=%llu",
-			        now_ms - g_last_event_time_ms, g_touch_seq);
+	if (g_evdev_button == ST_PR || g_evdev_button == ST_REL) {
+		if (g_evdev_button == ST_PR) {
+			g_last_valid_x = g_evdev_root_x;
+			g_last_valid_y = g_evdev_root_y;
 		}
-		g_evdev_button = ST_REL;
-		pthread_mutex_unlock(&g_touch_mutex);
 	}
 }
 
-static void emit_touch_state(void)
+static void run_emit_after_batch(void)
 {
-	long long now_ms = link_touch_now_ms();
+	long long now = link_touch_now_ms();
 	int current_state = g_evdev_button;
 	int out_x, out_y;
 
-	/* 先检查是否需要强制释放（参考 evdev.c） */
-	check_and_force_release(now_ms);
-	
-	/* 重新获取状态，因为 check_and_force_release 可能改变了 g_evdev_button */
-	current_state = g_evdev_button;
+	if (g_evdev_button == ST_PR && (now - g_last_event_time_ms) > g_noise_filter_time_ms) {
+		current_state = ST_REL;
+		g_evdev_button = ST_REL;
+		g_noise_filter_release_cnt++;
+	}
 
 	if (current_state == ST_PR) {
 		out_x = g_evdev_root_x;
@@ -349,10 +352,9 @@ static void emit_touch_state(void)
 	g_touch_seq++;
 	emit_link_touch_locked(out_x, out_y, current_state);
 	pthread_mutex_unlock(&g_touch_mutex);
-	
 	long long now_us = link_touch_now_us();
-	if ((g_touch_seq % (unsigned long long)CPT_PERF_SAMPLE_N()) == 0ULL) {
-		long long pipeline_us = (g_batch_first_event_us > 0) ? (now_us - g_batch_first_event_us) : 0;
+	if ((g_touch_seq % (unsigned long long)CPT_PERF_SAMPLE_N()) == 0ULL && g_batch_first_event_us > 0) {
+		long long pipeline_us = now_us - g_batch_first_event_us;
 		long long emit_interval_us = (g_last_touch_emit_us > 0) ? (now_us - g_last_touch_emit_us) : 0;
 		CPT_LOG("touch_emit", "seq=%llu state=%d x=%d y=%d pipeline_us=%lld noise_rel=%llu move_suppress=%llu",
 		        g_touch_seq, current_state, out_x, out_y, pipeline_us,
@@ -370,9 +372,6 @@ static void *link_touch_thread_fn(void *arg)
 	(void)arg;
 	carplay_set_self_sched_fifo_max("carplay_touch");
 	struct pollfd pfd;
-	struct input_event in;
-	ssize_t n;
-	int read_result;
 
 	if (g_evdev_fd < 0)
 		return NULL;
@@ -382,12 +381,8 @@ static void *link_touch_thread_fn(void *arg)
 
 	for (;;) {
 		long long poll_start_us = link_touch_now_us();
-		
-		/* 使用带超时的 poll，超时时间 100ms，确保能及时检查超时释放 */
-		int pr = poll(&pfd, 1, LINK_TOUCH_NOISE_FILTER_TIME_MS);
-		long long now_ms = link_touch_now_ms();
+		int pr = poll(&pfd, 1, -1);
 		long long poll_wakeup_us = link_touch_now_us();
-		
 		if (g_last_poll_wakeup_us > 0 && CPT_PERF_ENABLED()) {
 			long long interval = poll_wakeup_us - g_last_poll_wakeup_us;
 			if (interval > (long long)CPT_PERF_WARN_US()) {
@@ -396,63 +391,46 @@ static void *link_touch_thread_fn(void *arg)
 		}
 		g_last_poll_wakeup_us = poll_wakeup_us;
 
-		/* 无论是否有事件，都检查超时释放（参考 evdev.c） */
-		check_and_force_release(now_ms);
-
 		if (pr < 0) {
 			if (errno == EINTR)
 				continue;
 			perror("link_touch: poll");
 			break;
 		}
-		
-		if (pr == 0) {
-			/* poll 超时，没有新事件，继续循环（超时释放已处理） */
-			continue;
-		}
-		
 		if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
 			break;
 
 		if (!(pfd.revents & POLLIN))
 			continue;
 
-		/* 读取所有待处理的事件（非阻塞模式，参考 evdev.c） */
-		while (1) {
-			read_result = read(g_evdev_fd, &in, sizeof(struct input_event));
-			
-			if (read_result == (ssize_t)sizeof(in)) {
-				/* 更新最后事件时间戳 */
-				g_last_event_time_ms = now_ms;
-				
+		int batch_events = 0;
+		int emit_count = 0;
+		for (;;) {
+			struct input_event in;
+			ssize_t n = read(g_evdev_fd, &in, sizeof(in));
+
+			if (n == (ssize_t)sizeof(in)) {
 				if (in.type == EV_SYN && in.code == SYN_REPORT) {
-					/* 同步事件：发送当前触摸状态 */
-					emit_touch_state();
+					run_emit_after_batch();
+					emit_count++;
 				} else {
 					process_input_event(&in);
-					/* 更新有效坐标 */
-					if (g_evdev_button == ST_PR) {
-						g_last_valid_x = g_evdev_root_x;
-						g_last_valid_y = g_evdev_root_y;
-					}
 				}
+				batch_events++;
 				continue;
 			}
-			
-			if (read_result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+			if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 				break;
-				
-			if (read_result < 0) {
+			if (n < 0)
 				perror("link_touch: read");
-				break;
-			}
 			break;
 		}
-		
-		if (CPT_PERF_ENABLED()) {
+		if (CPT_PERF_ENABLED() && batch_events > 0) {
 			long long loop_cost = link_touch_now_us() - poll_start_us;
-			CPT_LOG("touch_batch", "cost_us=%lld", loop_cost);
+			CPT_LOG("touch_batch", "events=%d emits=%d read_loop_cost_us=%lld", batch_events, emit_count, loop_cost);
 		}
+		if (emit_count == 0 && batch_events > 0)
+			run_emit_after_batch();
 	}
 
 	if (g_evdev_fd >= 0) {
@@ -467,7 +445,6 @@ void carplay_link_touch_set_active(int active)
 	pthread_mutex_lock(&g_touch_mutex);
 	g_touch_active = active ? 1 : 0;
 	if (!g_touch_active && g_tracking) {
-		carplay_touch_send_xy(g_seq_x, g_seq_y, 0);
 		carplay_touch_send_xy(g_seq_x, g_seq_y, 0);
 		g_tracking = 0;
 	}
@@ -497,7 +474,6 @@ void carplay_link_touch_init(void)
 	g_last_event_time_ms = link_touch_now_ms();
 	g_last_valid_x = 0;
 	g_last_valid_y = 0;
-	
 	if (pthread_create(&g_thread, NULL, link_touch_thread_fn, NULL) != 0) {
 		perror("link_touch: pthread_create");
 		close(g_evdev_fd);

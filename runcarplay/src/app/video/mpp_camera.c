@@ -858,6 +858,8 @@ static ERRORTYPE setConfigPara(mpp_camera_para_conf *pContext){
 
     pContext->m_venc.mWidth = 1920;
     pContext->m_venc.mHeight = 1080;
+    // pContext->m_venc.mWidth = 1280;
+    // pContext->m_venc.mHeight = 720;
     pContext->m_venc.mFrameRate = 25;
     pContext->m_venc.mBitRate = 1024 * 1024 * 8;
     pContext->m_venc.mRcMode = 0;
@@ -2399,6 +2401,13 @@ ERRORTYPE deinitVi(mpp_camera_para_conf *pContext){
 
 ERRORTYPE recording(mpp_camera_para_conf *pContext){
     printf("%s:%d\n",__func__,__LINE__);
+
+    // // 关掉后摄像头录像（vi dev 8 是后摄）
+    // if (pContext->m_vi.mViDev != 0) {
+    //     printf("[mpp_dbg] skip recording for vi dev %d\n", pContext->m_vi.mViDev);
+    //     return SUCCESS;
+    // }
+
     ERRORTYPE ret = SUCCESS; 
     createAIChn(pContext, 0, 0);
     createAencChn(pContext);		
